@@ -141,13 +141,13 @@ app.MapGet("/health/ready", async (
     string database;
     try
     {
-        database = await db.Database.CanConnectAsync(ct) ? "ok" : "unreachable";
+        // Opened explicitly rather than via CanConnectAsync, which swallows the exception and
+        // returns false — "unreachable" with no reason is not a diagnosis.
+        await db.Database.OpenConnectionAsync(ct);
+        await db.Database.CloseConnectionAsync();
 
         // Connecting is not enough — the schema has to have been applied.
-        if (database == "ok" && !await db.Patients.AnyAsync(ct))
-        {
-            database = "ok (empty)";
-        }
+        database = await db.Patients.AnyAsync(ct) ? "ok" : "ok (empty)";
     }
     catch (Exception ex)
     {
@@ -158,9 +158,7 @@ app.MapGet("/health/ready", async (
     string bucket;
     try
     {
-        // A path that will not exist; we only care that the bucket answers rather than 404-ing
-        // the whole bucket or rejecting the key.
-        await storage.DeleteAsync("__readiness_probe__", ct);
+        await storage.ProbeAsync(ct);
         bucket = "ok";
     }
     catch (Exception ex)

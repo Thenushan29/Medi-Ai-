@@ -22,7 +22,9 @@
 [CmdletBinding()]
 param(
     [string]$ProjectRef = 'xfhdukhtoixzswjidkhn',
-    [string]$Region     = 'ap-southeast-1',
+    # Confirmed by probing every regional pooler for this tenant — the project lives in
+    # ap-south-1 (Mumbai), which is not what the IPv6 prefix of the direct host suggests.
+    [string]$Region     = 'ap-south-1',
     [string]$Bucket     = 'documents',
     [int]$Port          = 5000
 )
@@ -127,6 +129,10 @@ function Test-Readiness {
     # Start-Process has no -Environment on Windows PowerShell 5.1, so set it on this process;
     # child processes inherit it.
     $env:ASPNETCORE_URLS = "http://localhost:$Port"
+
+    # user-secrets are only loaded when the environment is Development. Without this the host
+    # fails validation with "the Url field is required" even though the secret is set.
+    $env:ASPNETCORE_ENVIRONMENT = 'Development'
 
     $process = Start-Process -FilePath 'dotnet' `
         -ArgumentList 'run', '--no-launch-profile', '--project', "`"$apiDir`"" `

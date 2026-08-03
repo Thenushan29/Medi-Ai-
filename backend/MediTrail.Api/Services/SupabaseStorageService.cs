@@ -105,6 +105,29 @@ public sealed class SupabaseStorageService(
             logger.LogWarning("Bulk delete under {Prefix} failed ({Status})", prefix, (int)deleteResponse.StatusCode);
         }
     }
+
+    public async Task ProbeAsync(CancellationToken ct = default)
+    {
+        // Getting the bucket requires a key authorised for it, so this distinguishes
+        // "bucket missing" from "wrong key" — the two mistakes people actually make.
+        var response = await http.GetAsync($"/storage/v1/bucket/{_options.Bucket}", ct);
+
+        if (response.IsSuccessStatusCode) return;
+
+        var status = (int)response.StatusCode;
+        var detail = await response.Content.ReadAsStringAsync(ct);
+
+        throw new StorageException(status switch
+        {
+            401 or 403 =>
+                $"Storage rejected the key ({status}). Supabase uses a separate secret key for " +
+                "server access — a publishable/anon key cannot reach the bucket.",
+            404 =>
+                $"Bucket '{_options.Bucket}' does not exist. Create it under Storage, or change " +
+                "Supabase:Bucket to match an existing one.",
+            _ => $"Storage probe failed ({status}): {detail}"
+        });
+    }
 }
 
 public sealed class StorageException(string message) : Exception(message);

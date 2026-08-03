@@ -19,4 +19,11 @@ public interface IStorageService
 
     /// <summary>Deletes every object under a prefix. Patient deletion must leave no orphaned files (§12.4).</summary>
     Task DeletePrefixAsync(string prefix, CancellationToken ct = default);
+
+    /// <summary>
+    /// Readiness probe: confirms the bucket exists and the configured key is authorised for it.
+    /// Throws with a readable reason when it is not — a probe that reports success on a rejected
+    /// key is worse than no probe at all.
+    /// </summary>
+    Task ProbeAsync(CancellationToken ct = default);
 }
