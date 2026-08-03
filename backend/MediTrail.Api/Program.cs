@@ -124,7 +124,57 @@ app.UseCors(CorsPolicy);
 app.MapControllers();
 
 // Target for the uptime ping that keeps the free tier from sleeping during judging (§19).
+// Deliberately touches nothing external, so a pinged-awake app stays cheap.
 app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTimeOffset.UtcNow }))
     .WithName("Health");
+
+// Readiness: proves the Supabase database and storage bucket are actually reachable with the
+// configured credentials. Use this after setup instead of guessing from a silent 500.
+app.MapGet("/health/ready", async (
+    MediTrailDbContext db,
+    IStorageService storage,
+    ILoggerFactory loggerFactory,
+    CancellationToken ct) =>
+{
+    var logger = loggerFactory.CreateLogger("Readiness");
+
+    string database;
+    try
+    {
+        database = await db.Database.CanConnectAsync(ct) ? "ok" : "unreachable";
+
+        // Connecting is not enough — the schema has to have been applied.
+        if (database == "ok" && !await db.Patients.AnyAsync(ct))
+        {
+            database = "ok (empty)";
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Readiness: database check failed");
+        database = $"error: {ex.GetBaseException().Message}";
+    }
+
+    string bucket;
+    try
+    {
+        // A path that will not exist; we only care that the bucket answers rather than 404-ing
+        // the whole bucket or rejecting the key.
+        await storage.DeleteAsync("__readiness_probe__", ct);
+        bucket = "ok";
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Readiness: storage check failed");
+        bucket = $"error: {ex.GetBaseException().Message}";
+    }
+
+    var healthy = database.StartsWith("ok") && bucket == "ok";
+
+    return healthy
+        ? Results.Ok(new { status = "ready", database, bucket })
+        : Results.Json(new { status = "not ready", database, bucket }, statusCode: 503);
+})
+.WithName("Readiness");
 
 app.Run();

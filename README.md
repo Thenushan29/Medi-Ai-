@@ -52,6 +52,10 @@ to the AI pipeline.
 - Node.js ≥ 24.15
 - A Supabase project (Postgres + Storage)
 
+> **Setting up Supabase for the first time?** Follow
+> [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md) — it covers the connection string, the
+> service-role key, the bucket, and how to verify all three.
+
 ### 1. Configure
 
 ```bash
@@ -84,6 +88,9 @@ RLS) is documented in §16.3.
 ```bash
 # API — http://localhost:5000, OpenAPI reference at /scalar
 cd backend/MediTrail.Api && dotnet run
+
+# Confirm Supabase is wired up correctly
+curl http://localhost:5000/health/ready
 
 # Frontend — http://localhost:4200
 cd frontend && npm start
