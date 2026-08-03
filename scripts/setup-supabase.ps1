@@ -78,6 +78,27 @@ if ($serviceKey -like 'sb_publishable_*') {
     exit 1
 }
 
+# Does this key even belong to THIS project? Easy to get wrong with more than one project open,
+# and every downstream symptom (auth failures, 'Invalid Compact JWS') hides the real cause.
+Write-Step "   Checking the key belongs to $ProjectRef"
+
+$keyStatus = (curl.exe -s -o NUL -w "%{http_code}" "$projectUrl/rest/v1/" `
+    -H "apikey: $serviceKey" -H "Authorization: Bearer $serviceKey")
+
+if ($keyStatus -eq '401') {
+    Write-Bad "This key belongs to a different Supabase project."
+    Write-Info "In the dashboard, check the address bar reads /project/$ProjectRef"
+    Write-Info "before copying from Settings -> API Keys. Every value - URL, key, database"
+    Write-Info "password - has to come from that same project."
+    exit 1
+}
+
+if ($keyStatus -ne '200') {
+    Write-Info "Key check returned HTTP $keyStatus; continuing anyway."
+} else {
+    Write-Ok "Key matches this project."
+}
+
 # ---------------------------------------------------------------------------
 # 2. Find a pooler host that resolves on IPv4
 # ---------------------------------------------------------------------------
