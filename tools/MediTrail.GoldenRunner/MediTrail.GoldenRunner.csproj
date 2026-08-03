@@ -1,0 +1,36 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\backend\MediTrail.Api\MediTrail.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Content does not flow across a project reference, and PromptLibrary loads from
+         BaseDirectory. Linked (not copied) so the runner and the API always read the same
+         prompt text — measuring accuracy against a stale copy would be worthless. -->
+    <Content Include="..\..\backend\MediTrail.Api\AiPipeline\Prompts\**\*.md"
+             Link="AiPipeline\Prompts\%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- This tool uses none of EF Core, but inherits it through the API project reference.
+         EFCore.NamingConventions pulls 10.0.4 transitively while the API resolves 10.0.10 from a
+         direct reference, which trips MSB3277 here. Pinning unifies both on the API's version.
+         The structural fix is to split Contracts + AiPipeline into their own library. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.10" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

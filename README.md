@@ -26,7 +26,9 @@ backend/MediTrail.Api/   ASP.NET Core 10 Web API
   Contracts/Api/         Wire DTOs, kept distinct from entities
   Controllers/           Thin: validate, delegate, map to a status code
   Services/              Patient, document and storage logic
-  AiPipeline/            Queue, background worker, extraction seam
+  AiPipeline/            Queue, background worker, vision extraction
+  AiPipeline/Prompts/    Prompts as files, not inline strings
+tools/GoldenRunner/      Extraction accuracy against hand-labelled truth (§18.1)
   Data/                  EF Core entities, DbContext, migrations
 frontend/                Angular 22 standalone + Tailwind v4
   src/app/core/          API client, models, language service
@@ -102,8 +104,8 @@ cd frontend && npm start
 
 | Milestone | State |
 |---|---|
-| **M1 — Foundation** | Done. Repo, both apps, schema, storage, upload persisting files and rows. |
-| **M2 — Extraction proven** | Next. `IDocumentExtractor` is the seam; `NotConfiguredDocumentExtractor` is the placeholder. Gates everything else. |
+| **M1 — Foundation** | Done. Repo, both apps, schema, storage, upload persisting files and rows. Verified end to end against Supabase. |
+| **M2 — Extraction proven** | Pipeline built: prompt, OpenRouter vision client, schema validation with one stricter retry, golden-dataset accuracy runner. **Not yet proven** — needs the dataset images and a measured accuracy figure. |
 | M3 — Intelligence complete | Not started. Normalize/merge, rule checks, cross-check, openFDA, trends. |
 | M4 — Application complete | Timeline and evidence viewer done; medications, lab trends, alerts and chat pending M3. |
 | M5 — Deployed | Not started. |

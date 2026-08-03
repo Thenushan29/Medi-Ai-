@@ -8,6 +8,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Prompts ship as files, not embedded strings, so they can be edited and diffed
+         independently of code (§15 maintainability). PromptLibrary reads them from here. -->
+    <Content Include="AiPipeline\Prompts\**\*.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">

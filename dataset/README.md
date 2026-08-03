@@ -39,3 +39,37 @@ cross-visit duplicates, dosage conflicts, allergy triggers, lab drift. All must 
 That list doubles as the demonstration script.
 
 **Owner:** ground-truth labelling is a teammate deliverable (§22).
+
+Start from `golden/_TEMPLATE.json`. Files whose name begins with `_` are ignored by the runner.
+Name each label file after its image — `patient_x_year1_rx.png` → `patient_x_year1_rx.json`.
+
+## Running the accuracy check
+
+```bash
+# once
+cd backend/MediTrail.Api
+dotnet user-secrets set "OpenRouter:ApiKey" "sk-or-..."
+
+# then, from the repository root
+dotnet run --project tools/MediTrail.GoldenRunner
+
+# or limit to one document while iterating on the prompt
+dotnet run --project tools/MediTrail.GoldenRunner -- patient_x
+```
+
+Output is accuracy per category plus every mismatch, with expected and actual side by side.
+Exit code is 0 only when overall accuracy is ≥ 95% **and** hallucinations are 0 **and** no document
+failed — so it can gate a build, not just print a number.
+
+The five outcomes it distinguishes:
+
+| Outcome | Meaning |
+|---|---|
+| `Correct` | Values agree |
+| `CorrectNull` | Both say unreadable — a success, since the prompt's core rule is null-over-guess |
+| `Wrong` | Both have values, they differ |
+| `Missed` | Label has a value, model returned null — cautious, not dangerous |
+| `Hallucinated` | Label says null, model produced a value — **target is zero** (§3.3) |
+
+`Hallucinated` is counted separately rather than folded into `Wrong` because it is the one failure
+mode that makes the product unsafe, and averaging would hide it.

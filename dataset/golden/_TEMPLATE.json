@@ -1,0 +1,64 @@
+{
+  "_comment": "TEMPLATE - copy to <image-file-name>.json and fill in. Files starting with _ are ignored by the runner. Label what is PRINTED, never what is inferred: an unreadable value is null, and a null that matches the model's null scores as CORRECT.",
+
+  "documentType": "prescription",
+  "documentDate": "2023-04-12",
+
+  "provider": {
+    "name": "Dr. S. Kumaran",
+    "facility": "Jaffna Teaching Hospital"
+  },
+
+  "medications": [
+    {
+      "brandName": "Panadol",
+      "genericName": "paracetamol",
+      "strengthValue": 500,
+      "strengthUnit": "mg",
+      "frequency": "1 Morning, 1 Night",
+      "frequencyPerDay": 2,
+      "durationDays": 5,
+      "sourceText": "Panadol 500mg  1 Morning, 1 Night x 5/7"
+    },
+    {
+      "brandName": "Zoclar 500",
+      "genericName": "clarithromycin",
+      "strengthValue": 500,
+      "strengthUnit": "mg",
+      "frequency": "BD",
+      "frequencyPerDay": 2,
+      "durationDays": 7,
+      "sourceText": "Zoclar 500  BD  1/52"
+    }
+  ],
+
+  "labResults": [
+    {
+      "testName": "SGPT (ALT)",
+      "testNameStandard": "alt",
+      "valueNumeric": 88,
+      "unit": "U/L",
+      "normalMin": 7,
+      "normalMax": 56,
+      "normalRangeText": "7 - 56",
+      "testDate": "2023-04-10",
+      "sourceText": "SGPT (ALT)   88 U/L   (7 - 56)"
+    }
+  ],
+
+  "allergies": [],
+
+  "warningsInDocument": [
+    {
+      "text": "Avoid liver-toxic medications (e.g. acetaminophen)",
+      "relatesTo": ["acetaminophen"],
+      "sourceText": "Advice: avoid liver-toxic medications (e.g. acetaminophen)"
+    }
+  ],
+
+  "diagnoses": [
+    { "text": "Jaundice", "sourceText": "Dx: Jaundice" }
+  ],
+
+  "unreadableSections": []
+}

@@ -1,12 +1,14 @@
 using System.Text.Json.Serialization;
 using MediTrail.Api.AiPipeline;
 using MediTrail.Api.AiPipeline.Extraction;
+using MediTrail.Api.AiPipeline.OpenRouter;
 using MediTrail.Api.Configuration;
 using MediTrail.Api.Data;
 using MediTrail.Api.Middleware;
 using MediTrail.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,9 +53,36 @@ builder.Services.AddHttpClient<IStorageService, SupabaseStorageService>((provide
     client.Timeout = TimeSpan.FromMinutes(2);
 });
 
-// M2 replaces this with the OpenRouter vision extractor. Until then it fails loudly rather
-// than returning an empty extraction that would read as "this document was blank".
-builder.Services.AddScoped<IDocumentExtractor, NotConfiguredDocumentExtractor>();
+builder.Services.AddSingleton<IPromptLibrary, PromptLibrary>();
+
+var openRouterKey = builder.Configuration[$"{OpenRouterOptions.SectionName}:ApiKey"];
+
+if (string.IsNullOrWhiteSpace(openRouterKey))
+{
+    // No key: the app still runs and uploads still persist, but every document fails with a
+    // reason that names the cause — better than booting into a state where extraction silently
+    // produces nothing.
+    builder.Services.AddScoped<IDocumentExtractor, NotConfiguredDocumentExtractor>();
+}
+else
+{
+    builder.Services.AddHttpClient<IAiClient, OpenRouterAiClient>((provider, client) =>
+    {
+        var openRouter = provider.GetRequiredService<IOptions<OpenRouterOptions>>().Value;
+
+        client.BaseAddress = new Uri(openRouter.BaseUrl.TrimEnd('/') + "/");
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {openRouter.ApiKey}");
+        client.Timeout = TimeSpan.FromSeconds(openRouter.TimeoutSeconds);
+
+        // OpenRouter attribution headers; optional, and harmless when unset.
+        if (!string.IsNullOrWhiteSpace(openRouter.SiteUrl))
+            client.DefaultRequestHeaders.Add("HTTP-Referer", openRouter.SiteUrl);
+        if (!string.IsNullOrWhiteSpace(openRouter.SiteName))
+            client.DefaultRequestHeaders.Add("X-Title", openRouter.SiteName);
+    });
+
+    builder.Services.AddScoped<IDocumentExtractor, VisionDocumentExtractor>();
+}
 
 // ---------------------------------------------------------------------------
 // Background processing (§14.3)
