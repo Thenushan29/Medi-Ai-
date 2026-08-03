@@ -106,10 +106,14 @@ public sealed class OpenAiCompatibleClient(
                             $"{_options.Provider} returned {(int)response.StatusCode}: {Truncate(body)}");
                     }
 
-                    logger.LogWarning("{Provider} {Status} on attempt {Attempt}/{Max}; retrying",
-                        _options.Provider, (int)response.StatusCode, attempt, _options.MaxAttempts);
+                    // A tokens-per-minute limit clears on the provider's schedule, not ours —
+                    // exponential backoff of a few seconds just burns attempts against a 60s window.
+                    var wait = RetryAfter(response) ?? Backoff(attempt);
 
-                    await BackoffAsync(attempt, ct);
+                    logger.LogWarning("{Provider} {Status} on attempt {Attempt}/{Max}; retrying in {Seconds:0.#}s",
+                        _options.Provider, (int)response.StatusCode, attempt, _options.MaxAttempts, wait.TotalSeconds);
+
+                    await Task.Delay(wait, ct);
                     continue;
                 }
 
@@ -150,9 +154,9 @@ public sealed class OpenAiCompatibleClient(
                 ex is HttpRequestException or TaskCanceledException && attempt < _options.MaxAttempts)
             {
                 lastError = ex;
-                logger.LogWarning(ex, "OpenRouter transport failure on attempt {Attempt}/{Max}; retrying",
-                    attempt, _options.MaxAttempts);
-                await BackoffAsync(attempt, ct);
+                logger.LogWarning(ex, "{Provider} transport failure on attempt {Attempt}/{Max}; retrying",
+                    _options.Provider, attempt, _options.MaxAttempts);
+                await Task.Delay(Backoff(attempt), ct);
             }
         }
 
@@ -169,8 +173,23 @@ public sealed class OpenAiCompatibleClient(
                or HttpStatusCode.ServiceUnavailable
                or HttpStatusCode.GatewayTimeout;
 
-    private static Task BackoffAsync(int attempt, CancellationToken ct) =>
-        Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt)), ct);
+    private static TimeSpan Backoff(int attempt) => TimeSpan.FromSeconds(Math.Pow(2, attempt));
+
+    /// <summary>
+    /// Honours the provider's own Retry-After. Capped at two minutes so a long hint cannot stall
+    /// the worker — better to fail this document and let the rest of the batch proceed (§14.4).
+    /// </summary>
+    private static TimeSpan? RetryAfter(HttpResponseMessage response)
+    {
+        var header = response.Headers.RetryAfter;
+
+        var wait = header?.Delta
+            ?? (header?.Date is { } date ? date - DateTimeOffset.UtcNow : null);
+
+        if (wait is null || wait <= TimeSpan.Zero) return null;
+
+        return wait > TimeSpan.FromMinutes(2) ? TimeSpan.FromMinutes(2) : wait;
+    }
 
     private static string Normalize(string contentType) =>
         contentType.Equals("image/jpg", StringComparison.OrdinalIgnoreCase) ? "image/jpeg" : contentType;

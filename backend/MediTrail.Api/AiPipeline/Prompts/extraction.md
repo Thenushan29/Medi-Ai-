@@ -77,70 +77,39 @@ at all in `unreadableSections`.
 Return the schema with empty arrays, `overallConfidence: 0`, and say what it appears to be in
 `legibilityNotes`. Do not invent plausible medical content.
 
+# Output size
+
+**Omit any field that would be `null`, and any array that would be empty.** A missing field means
+exactly the same as `null` here. Do not pad the response with placeholders — a shorter response is a
+better one, and a truncated response is a failed one.
+
 # Schema
 
-```json
-{
-  "documentType": "prescription | lab_report | discharge_summary | doctor_note | other | null",
-  "documentDate": "yyyy-MM-dd | null",
-  "documentDateConfidence": 0,
-  "provider": { "name": null, "facility": null, "specialty": null, "confidence": 0 },
-  "patient": { "name": null, "age": null, "sex": null, "confidence": 0 },
-  "diagnoses": [
-    { "text": null, "sourceText": null, "confidence": 0 }
-  ],
-  "medications": [
-    {
-      "brandName": null,
-      "genericName": null,
-      "strengthValue": null,
-      "strengthUnit": null,
-      "dose": null,
-      "frequency": null,
-      "frequencyPerDay": null,
-      "route": null,
-      "durationDays": null,
-      "instructions": null,
-      "sourceText": null,
-      "confidence": 0
-    }
-  ],
-  "labResults": [
-    {
-      "testName": null,
-      "testNameStandard": null,
-      "valueNumeric": null,
-      "valueText": null,
-      "unit": null,
-      "normalMin": null,
-      "normalMax": null,
-      "normalRangeText": null,
-      "testDate": "yyyy-MM-dd | null",
-      "sourceText": null,
-      "confidence": 0
-    }
-  ],
-  "allergies": [
-    {
-      "substance": null,
-      "substanceGeneric": null,
-      "reaction": null,
-      "severity": "mild | moderate | severe | null",
-      "sourceText": null,
-      "confidence": 0
-    }
-  ],
-  "warningsInDocument": [
-    { "text": null, "relatesTo": [], "sourceText": null, "confidence": 0 }
-  ],
-  "clinicalNotes": null,
-  "followUpDate": "yyyy-MM-dd | null",
-  "overallConfidence": 0,
-  "legibilityNotes": null,
-  "unreadableSections": []
-}
+Types are shown once. Omit what does not apply.
+
+```
+documentType             "prescription" | "lab_report" | "discharge_summary" | "doctor_note" | "other"
+documentDate             "yyyy-MM-dd"
+documentDateConfidence   number 0-100
+provider                 { name, facility, specialty, confidence }
+patient                  { name, age, sex, confidence }
+diagnoses[]              { text, sourceText, confidence }
+medications[]            { brandName, genericName, strengthValue: number, strengthUnit,
+                           dose, frequency, frequencyPerDay: number, route,
+                           durationDays: number, instructions, sourceText, confidence }
+labResults[]             { testName, testNameStandard, valueNumeric: number, valueText, unit,
+                           normalMin: number, normalMax: number, normalRangeText,
+                           testDate: "yyyy-MM-dd", sourceText, confidence }
+allergies[]              { substance, substanceGeneric, reaction,
+                           severity: "mild"|"moderate"|"severe", sourceText, confidence }
+warningsInDocument[]     { text, relatesTo: [generic names], sourceText, confidence }
+clinicalNotes            string
+followUpDate             "yyyy-MM-dd"
+overallConfidence        number 0-100
+legibilityNotes          string
+unreadableSections[]     string
 ```
 
-Sections that do not apply are empty arrays `[]`, never omitted and never `null`.
+Unmarked fields are strings. Numbers are bare — `500`, not `"500mg"`; units belong in their own field.
 
 Extract the document now. Return only the JSON object.

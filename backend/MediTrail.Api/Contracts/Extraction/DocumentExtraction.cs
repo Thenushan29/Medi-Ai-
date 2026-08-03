@@ -78,7 +78,12 @@ public sealed record ProviderInfo
 public sealed record PatientInfo
 {
     [JsonPropertyName("name")] public string? Name { get; init; }
-    [JsonPropertyName("age")] public string? Age { get; init; }
+
+    /// <summary>Free text — "58", "58 years", "6 months". Models emit both a number and a string here.</summary>
+    [JsonPropertyName("age")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
+    public string? Age { get; init; }
+
     [JsonPropertyName("sex")] public string? Sex { get; init; }
     [JsonPropertyName("confidence")] public int? Confidence { get; init; }
 }
@@ -102,7 +107,11 @@ public sealed record ExtractedMedication
 
     [JsonPropertyName("strengthValue")] public decimal? StrengthValue { get; init; }
     [JsonPropertyName("strengthUnit")] public string? StrengthUnit { get; init; }
-    [JsonPropertyName("dose")] public string? Dose { get; init; }
+
+    /// <summary>"1 tablet", "2 puffs", or bare `2`. Both shapes occur.</summary>
+    [JsonPropertyName("dose")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
+    public string? Dose { get; init; }
 
     /// <summary>Frequency as printed — "1 Morning, 1 Night", "TDS", "bd".</summary>
     [JsonPropertyName("frequency")] public string? Frequency { get; init; }
@@ -130,14 +139,18 @@ public sealed record ExtractedLabResult
     [JsonPropertyName("valueNumeric")] public decimal? ValueNumeric { get; init; }
 
     /// <summary>For non-numeric results — "Positive", "Trace", "Not detected".</summary>
-    [JsonPropertyName("valueText")] public string? ValueText { get; init; }
+    [JsonPropertyName("valueText")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
+    public string? ValueText { get; init; }
 
     [JsonPropertyName("unit")] public string? Unit { get; init; }
     [JsonPropertyName("normalMin")] public decimal? NormalMin { get; init; }
     [JsonPropertyName("normalMax")] public decimal? NormalMax { get; init; }
 
     /// <summary>Reference range exactly as printed, when it will not parse into min/max.</summary>
-    [JsonPropertyName("normalRangeText")] public string? NormalRangeText { get; init; }
+    [JsonPropertyName("normalRangeText")]
+    [JsonConverter(typeof(FlexibleStringConverter))]
+    public string? NormalRangeText { get; init; }
 
     [JsonPropertyName("testDate")] public string? TestDate { get; init; }
     [JsonPropertyName("sourceText")] public string? SourceText { get; init; }
