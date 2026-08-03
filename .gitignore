@@ -1,0 +1,55 @@
+# ---------- Secrets ----------
+# NEVER commit a key. Config comes from environment variables / user-secrets.
+*.local.json
+appsettings.Local.json
+appsettings.Development.json
+.env
+.env.*
+!.env.example
+secrets.json
+
+# ---------- .NET ----------
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+artifacts/
+TestResults/
+*.coverage
+*.trx
+
+# ---------- Node / Angular ----------
+node_modules/
+dist/
+.angular/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ---------- Editors ----------
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ---------- MediTrail runtime output ----------
+# Local scratch for downloaded source documents and pipeline dumps.
+/tmp/
+/backend/**/uploads/
+/backend/**/wwwroot/uploads/
+*.pipeline.json
+
+# ---------- Dataset ----------
+# Patient documents are PHI. Keep the folder + labels, never the images.
+/dataset/**/*.png
+/dataset/**/*.jpg
+/dataset/**/*.jpeg
+/dataset/**/*.pdf
+!/dataset/golden/**/*.json

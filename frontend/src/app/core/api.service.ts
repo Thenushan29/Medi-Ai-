@@ -1,0 +1,102 @@
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { Observable, catchError, throwError } from 'rxjs';
+
+import { environment } from '../../environments/environment';
+import type {
+  CreatePatientRequest,
+  DocumentDetail,
+  PatientDetail,
+  PatientSummary,
+  ProcessingStatus,
+  TimelineEntry,
+  UploadResult
+} from './models';
+
+/**
+ * The single place the frontend talks to the API (§13).
+ * Errors are unwrapped from the backend's error envelope so components handle one shape.
+ */
+@Injectable({ providedIn: 'root' })
+export class ApiService {
+  private readonly http = inject(HttpClient);
+  private readonly base = `${environment.apiBaseUrl}/api`;
+
+  // ---- Patients ----
+
+  createPatient(request: CreatePatientRequest): Observable<PatientDetail> {
+    return this.http
+      .post<PatientDetail>(`${this.base}/patients`, request)
+      .pipe(catchError(toReadableError));
+  }
+
+  listPatients(): Observable<PatientSummary[]> {
+    return this.http
+      .get<PatientSummary[]>(`${this.base}/patients`)
+      .pipe(catchError(toReadableError));
+  }
+
+  getPatient(id: string): Observable<PatientDetail> {
+    return this.http
+      .get<PatientDetail>(`${this.base}/patients/${id}`)
+      .pipe(catchError(toReadableError));
+  }
+
+  deletePatient(id: string): Observable<void> {
+    return this.http
+      .delete<void>(`${this.base}/patients/${id}`)
+      .pipe(catchError(toReadableError));
+  }
+
+  // ---- Documents ----
+
+  /** Returns as soon as the files are stored; extraction continues in the background (FR-2.8). */
+  uploadDocuments(patientId: string, files: File[], visitLabel?: string): Observable<UploadResult> {
+    const form = new FormData();
+    for (const file of files) {
+      form.append('files', file, file.name);
+    }
+    if (visitLabel) {
+      form.append('visitLabel', visitLabel);
+    }
+
+    return this.http
+      .post<UploadResult>(`${this.base}/patients/${patientId}/documents`, form)
+      .pipe(catchError(toReadableError));
+  }
+
+  getStatus(patientId: string): Observable<ProcessingStatus> {
+    return this.http
+      .get<ProcessingStatus>(`${this.base}/patients/${patientId}/status`)
+      .pipe(catchError(toReadableError));
+  }
+
+  getTimeline(patientId: string): Observable<TimelineEntry[]> {
+    return this.http
+      .get<TimelineEntry[]>(`${this.base}/patients/${patientId}/timeline`)
+      .pipe(catchError(toReadableError));
+  }
+
+  getDocument(documentId: string): Observable<DocumentDetail> {
+    return this.http
+      .get<DocumentDetail>(`${this.base}/documents/${documentId}`)
+      .pipe(catchError(toReadableError));
+  }
+}
+
+/**
+ * Surfaces the backend's message where there is one. A network failure gets its own copy rather
+ * than "Http failure response for ..." — error states must be readable (FR-8.8).
+ */
+function toReadableError(error: HttpErrorResponse) {
+  if (error.status === 0) {
+    return throwError(() => new Error('Could not reach the MediTrail server. Check your connection and try again.'));
+  }
+
+  const message =
+    typeof error.error?.message === 'string'
+      ? error.error.message
+      : 'Something went wrong. Please try again.';
+
+  return throwError(() => new Error(message));
+}

@@ -1,0 +1,24 @@
+# Normalize to LF in the repository; check out native on Windows.
+* text=auto
+
+*.cs      text diff=csharp
+*.ts      text
+*.html    text
+*.css     text
+*.json    text
+*.sql     text
+*.md      text
+
+*.sh      text eol=lf
+*.ps1     text eol=crlf
+
+# Generated — collapse in diffs and exclude from language stats.
+db/01_schema.sql                          linguist-generated=true
+frontend/package-lock.json                linguist-generated=true
+backend/MediTrail.Api/Data/Migrations/**  linguist-generated=true
+
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.pdf  binary
+*.ico  binary

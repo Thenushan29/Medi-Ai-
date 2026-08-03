@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+
+/*
+  MediTrail design language (PRD §10): clean clinical.
+  White background, teal/emerald primary, soft grey surfaces, generous spacing, Inter.
+  Traffic-light colours are reserved exclusively for severity — never decorative.
+*/
+@theme {
+  --font-sans: 'Inter', 'Noto Sans Tamil', ui-sans-serif, system-ui, sans-serif;
+
+  --color-surface: oklch(99% 0.002 250);
+  --color-surface-raised: oklch(100% 0 0);
+  --color-border-subtle: oklch(92% 0.004 250);
+
+  /* Primary — navigation, actions, focus. Never used to signal severity. */
+  --color-brand-50: oklch(97.5% 0.02 175);
+  --color-brand-100: oklch(94% 0.04 175);
+  --color-brand-500: oklch(66% 0.12 175);
+  --color-brand-600: oklch(58% 0.115 175);
+  --color-brand-700: oklch(49% 0.1 175);
+
+  /* Severity — reserved. Always paired with an icon and text, never colour alone (§15). */
+  --color-severity-red: oklch(55% 0.19 25);
+  --color-severity-red-bg: oklch(96% 0.03 25);
+  --color-severity-amber: oklch(65% 0.14 75);
+  --color-severity-amber-bg: oklch(97% 0.04 85);
+  --color-severity-info: oklch(58% 0.09 240);
+  --color-severity-info-bg: oklch(97% 0.02 240);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: oklch(25% 0.01 250);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Keyboard navigation of the primary flow is a stated requirement (§15 accessibility). */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+  }
+}
