@@ -2,19 +2,36 @@ using System.ComponentModel.DataAnnotations;
 
 namespace MediTrail.Api.Configuration;
 
-/// <summary>
-/// OpenRouter access. The model identifier is configuration, never hard-coded, so it can be
-/// swapped without a code change if a provider degrades mid-competition (PRD §11.2, §21).
-/// </summary>
-public sealed class OpenRouterOptions
+/// <summary>Which OpenAI-compatible provider to talk to. Differences are small but not zero.</summary>
+public enum AiProvider
 {
-    public const string SectionName = "OpenRouter";
+    /// <summary>Accepts a `reasoning` block and attribution headers.</summary>
+    OpenRouter,
+    /// <summary>Free tier, very fast. Rejects unknown top-level fields, so `reasoning` is omitted.</summary>
+    Groq,
+    /// <summary>Anything else speaking the OpenAI chat-completions API. Nothing provider-specific is sent.</summary>
+    OpenAiCompatible
+}
+
+/// <summary>
+/// AI provider access. Provider, endpoint and model are all configuration, never hard-coded, so
+/// they can be swapped without a code change if one degrades mid-competition (PRD §11.2, §21).
+/// </summary>
+public sealed class AiOptions
+{
+    public const string SectionName = "Ai";
+
+    public AiProvider Provider { get; set; } = AiProvider.OpenRouter;
 
     /// <summary>Server-side only. Never sent to the browser (§17.2).</summary>
     [Required(AllowEmptyStrings = false)]
     public string ApiKey { get; set; } = string.Empty;
 
-    public string BaseUrl { get; set; } = "https://openrouter.ai/api/v1";
+    /// <summary>
+    /// Chat-completions base URL. Leave empty to use the provider's default:
+    /// OpenRouter <c>https://openrouter.ai/api/v1</c>, Groq <c>https://api.groq.com/openai/v1</c>.
+    /// </summary>
+    public string BaseUrl { get; set; } = string.Empty;
 
     /// <summary>Vision-capable model used for extraction.</summary>
     [Required(AllowEmptyStrings = false)]
@@ -23,6 +40,14 @@ public sealed class OpenRouterOptions
     /// <summary>Text model for cross-check, trends and chat. May be the same as the extraction model.</summary>
     [Required(AllowEmptyStrings = false)]
     public string ReasoningModel { get; set; } = "google/gemini-2.5-flash";
+
+    public string ResolveBaseUrl() => !string.IsNullOrWhiteSpace(BaseUrl)
+        ? BaseUrl
+        : Provider switch
+        {
+            AiProvider.Groq => "https://api.groq.com/openai/v1",
+            _ => "https://openrouter.ai/api/v1"
+        };
 
     /// <summary>Temperature 0 for every call — extraction and cross-checking must be reproducible (§11.2).</summary>
     public double Temperature { get; set; }

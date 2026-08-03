@@ -6,20 +6,22 @@ using System.Text.Json.Serialization;
 using MediTrail.Api.Configuration;
 using Microsoft.Extensions.Options;
 
-namespace MediTrail.Api.AiPipeline.OpenRouter;
+namespace MediTrail.Api.AiPipeline.Providers;
 
 /// <summary>
-/// OpenRouter over its OpenAI-compatible chat completions API.
+/// Any provider speaking the OpenAI chat-completions API — OpenRouter, Groq, or another endpoint.
+/// The provider is configuration, not a code dependency (§14.2), which is also the mitigation for
+/// an outage or rate limit during judging (§21).
 ///
 /// Cost and determinism controls per §11.2 and §11.6: temperature 0, capped max_tokens,
-/// capped attempts, and reasoning tokens disabled where the model supports it.
+/// capped attempts, and reasoning tokens disabled where the provider supports the switch.
 /// </summary>
-public sealed class OpenRouterAiClient(
+public sealed class OpenAiCompatibleClient(
     HttpClient http,
-    IOptions<OpenRouterOptions> options,
-    ILogger<OpenRouterAiClient> logger) : IAiClient
+    IOptions<AiOptions> options,
+    ILogger<OpenAiCompatibleClient> logger) : IAiClient
 {
-    private readonly OpenRouterOptions _options = options.Value;
+    private readonly AiOptions _options = options.Value;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -38,7 +40,11 @@ public sealed class OpenRouterAiClient(
             Model = model ?? _options.ExtractionModel,
             Temperature = _options.Temperature,
             MaxTokens = _options.MaxTokens,
-            Reasoning = new ReasoningConfig { Enabled = false },
+            // Groq rejects unknown top-level fields with a 400, so the switch is only sent to
+            // providers that define it.
+            Reasoning = _options.Provider == AiProvider.OpenRouter
+                ? new ReasoningConfig { Enabled = false }
+                : null,
             Messages =
             [
                 new ChatMessage
@@ -64,7 +70,11 @@ public sealed class OpenRouterAiClient(
             Model = model ?? _options.ReasoningModel,
             Temperature = _options.Temperature,
             MaxTokens = _options.MaxTokens,
-            Reasoning = new ReasoningConfig { Enabled = false },
+            // Groq rejects unknown top-level fields with a 400, so the switch is only sent to
+            // providers that define it.
+            Reasoning = _options.Provider == AiProvider.OpenRouter
+                ? new ReasoningConfig { Enabled = false }
+                : null,
             Messages =
             [
                 new ChatMessage { Role = "system", Content = [new ContentPart { Type = "text", Text = systemPrompt }] },
@@ -93,22 +103,22 @@ public sealed class OpenRouterAiClient(
                     if (!IsRetryable(response.StatusCode) || attempt == _options.MaxAttempts)
                     {
                         throw new AiClientException(
-                            $"OpenRouter returned {(int)response.StatusCode}: {Truncate(body)}");
+                            $"{_options.Provider} returned {(int)response.StatusCode}: {Truncate(body)}");
                     }
 
-                    logger.LogWarning("OpenRouter {Status} on attempt {Attempt}/{Max}; retrying",
-                        (int)response.StatusCode, attempt, _options.MaxAttempts);
+                    logger.LogWarning("{Provider} {Status} on attempt {Attempt}/{Max}; retrying",
+                        _options.Provider, (int)response.StatusCode, attempt, _options.MaxAttempts);
 
                     await BackoffAsync(attempt, ct);
                     continue;
                 }
 
                 var payload = await response.Content.ReadFromJsonAsync<ChatResponse>(JsonOptions, ct)
-                    ?? throw new AiClientException("OpenRouter returned an empty body.");
+                    ?? throw new AiClientException($"{_options.Provider} returned an empty body.");
 
                 if (payload.Error is not null)
                 {
-                    throw new AiClientException($"OpenRouter error: {payload.Error.Message}");
+                    throw new AiClientException($"{_options.Provider} error: {payload.Error.Message}");
                 }
 
                 var content = payload.Choices?.FirstOrDefault()?.Message?.Content;
@@ -117,13 +127,13 @@ public sealed class OpenRouterAiClient(
                     // A blank completion is usually a truncated response or a refusal. Retrying the
                     // identical request rarely helps, so surface it.
                     throw new AiClientException(
-                        $"OpenRouter returned no content (finish reason: {payload.Choices?.FirstOrDefault()?.FinishReason ?? "unknown"}).");
+                        $"{_options.Provider} returned no content (finish reason: {payload.Choices?.FirstOrDefault()?.FinishReason ?? "unknown"}).");
                 }
 
                 stopwatch.Stop();
 
                 logger.LogInformation(
-                    "OpenRouter {Model} ok in {Ms}ms (prompt {PromptTokens}, completion {CompletionTokens})",
+                    "{Model} ok in {Ms}ms (prompt {PromptTokens}, completion {CompletionTokens})",
                     payload.Model ?? request.Model, stopwatch.ElapsedMilliseconds,
                     payload.Usage?.PromptTokens, payload.Usage?.CompletionTokens);
 
@@ -147,7 +157,7 @@ public sealed class OpenRouterAiClient(
         }
 
         throw new AiClientException(
-            $"OpenRouter did not respond after {_options.MaxAttempts} attempts.", lastError);
+            $"{_options.Provider} did not respond after {_options.MaxAttempts} attempts.", lastError);
     }
 
     // 429 and 5xx are worth another attempt; 400/401/403 mean the request or key is wrong and

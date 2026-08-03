@@ -2,13 +2,14 @@ using System.Text;
 using System.Text.Json;
 using MediTrail.Api.AiPipeline;
 using MediTrail.Api.AiPipeline.Extraction;
-using MediTrail.Api.AiPipeline.OpenRouter;
+using MediTrail.Api.AiPipeline.Providers;
 using MediTrail.Api.Configuration;
 using MediTrail.Api.Contracts.Extraction;
 using MediTrail.GoldenRunner;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 // MediTrail golden dataset runner — the primary quality gate (§18.1).
 //
@@ -36,27 +37,29 @@ var configuration = new ConfigurationBuilder()
     .AddEnvironmentVariables()
     .Build();
 
-var apiKey = configuration[$"{OpenRouterOptions.SectionName}:ApiKey"];
+var apiKey = configuration[$"{AiOptions.SectionName}:ApiKey"];
 if (string.IsNullOrWhiteSpace(apiKey))
 {
     Console.Error.WriteLine(
-        "OpenRouter:ApiKey is not set.\n" +
-        "  cd backend/MediTrail.Api && dotnet user-secrets set \"OpenRouter:ApiKey\" \"sk-or-...\"");
+        "Ai:ApiKey is not set.\n" +
+        "  cd backend/MediTrail.Api\n" +
+        "  dotnet user-secrets set \"Ai:Provider\" \"Groq\"\n" +
+        "  dotnet user-secrets set \"Ai:ApiKey\" \"gsk_...\"");
     return 2;
 }
 
 var services = new ServiceCollection();
 services.AddLogging(b => b.AddSimpleConsole(o => o.SingleLine = true).SetMinimumLevel(LogLevel.Warning));
-services.Configure<OpenRouterOptions>(configuration.GetSection(OpenRouterOptions.SectionName));
+services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
 services.AddSingleton<IPromptLibrary, PromptLibrary>();
-services.AddHttpClient<IAiClient, OpenRouterAiClient>((provider, client) =>
-{
-    var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<OpenRouterOptions>>().Value;
-    client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
-    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {options.ApiKey}");
-    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-});
+// Same configuration path as the API — measuring against different settings than production
+// would make the accuracy figure meaningless.
+services.AddHttpClient<IAiClient, OpenAiCompatibleClient>((provider, client) =>
+    AiHttpClient.Configure(client, provider.GetRequiredService<IOptions<AiOptions>>().Value));
 services.AddScoped<IDocumentExtractor, VisionDocumentExtractor>();
+
+var aiOptions = configuration.GetSection(AiOptions.SectionName).Get<AiOptions>() ?? new AiOptions();
+Console.WriteLine($"Provider: {aiOptions.Provider}  Model: {aiOptions.ExtractionModel}");
 
 using var provider = services.BuildServiceProvider();
 var extractor = provider.GetRequiredService<IDocumentExtractor>();

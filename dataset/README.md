@@ -46,9 +46,11 @@ Name each label file after its image — `patient_x_year1_rx.png` → `patient_x
 ## Running the accuracy check
 
 ```bash
-# once
+# once — Groq's free tier is the cheap way to iterate on the prompt
 cd backend/MediTrail.Api
-dotnet user-secrets set "OpenRouter:ApiKey" "sk-or-..."
+dotnet user-secrets set "Ai:Provider" "Groq"
+dotnet user-secrets set "Ai:ApiKey" "gsk_..."
+dotnet user-secrets set "Ai:ExtractionModel" "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # then, from the repository root
 dotnet run --project tools/MediTrail.GoldenRunner
@@ -73,3 +75,8 @@ The five outcomes it distinguishes:
 
 `Hallucinated` is counted separately rather than folded into `Wrong` because it is the one failure
 mode that makes the product unsafe, and averaging would hide it.
+
+The runner prints the provider and model it used on the first line. **The accuracy figure quoted in
+the technical summary must come from the model the demo actually runs on** — a number measured on a
+free-tier model while the deployed app uses another describes a product nobody is submitting.
+Iterate on the prompt cheaply, then re-run once on the real model for the headline number.

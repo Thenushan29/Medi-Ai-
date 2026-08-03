@@ -72,7 +72,12 @@ dotnet user-secrets init
 dotnet user-secrets set "ConnectionStrings:Postgres" "<supabase-pooled-connection-string>"
 dotnet user-secrets set "Supabase:Url" "https://<project-ref>.supabase.co"
 dotnet user-secrets set "Supabase:ServiceKey" "<service-role-key>"
-dotnet user-secrets set "OpenRouter:ApiKey" "<openrouter-key>"
+
+# AI provider — OpenRouter, Groq, or any OpenAI-compatible endpoint.
+# Groq's free tier is the cheap way to iterate on the prompt.
+dotnet user-secrets set "Ai:Provider" "Groq"
+dotnet user-secrets set "Ai:ApiKey" "<key>"
+dotnet user-secrets set "Ai:ExtractionModel" "meta-llama/llama-4-scout-17b-16e-instruct"
 ```
 
 ### 2. Apply the database schema
