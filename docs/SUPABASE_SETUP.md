@@ -146,10 +146,35 @@ A `201` with an `id` means the database write path works. Delete it afterwards w
 
 ## Troubleshooting
 
+### Everything above must come from the *same* project
+
+By far the most expensive mistake, because none of its symptoms name it. Values mixed between two
+projects produce `password authentication failed`, `Invalid Compact JWS`, and
+`tenant/user ... not found` — three unrelated-looking errors with one cause.
+
+Before copying anything, check the dashboard address bar reads
+`/dashboard/project/<ref>` — **not** `/dashboard/org/<id>`, which is the organisation, not a project.
+
+`scripts/setup-supabase.ps1` now verifies key ownership up front so this fails immediately and by name.
+
+### Finding the pooler region
+
+Take it from the Connect dialog. Do **not** infer it from the direct host's IPv6 prefix — for this
+project that suggested `ap-south-1` while the pooler actually serves it from `ap-southeast-2`.
+
+If the Connect dialog is unclear, `tenant/user <ref> not found` means wrong region; any other error
+means the region is right.
+
+---
+
 | Symptom | Cause | Fix |
 |---|---|---|
+| `tenant/user ... not found` | Wrong pooler region, or ref from another project | Confirm both in the Connect dialog |
+| `Invalid API key` / `owned by another Supabase project` | Key from a different project | Re-copy from `/dashboard/project/<ref>` |
+| `Invalid Compact JWS` on storage | Same — key does not belong to this project | As above |
 | `Timeout ... 28000ms` or `No such host` | Using the IPv6-only direct connection | Switch to the session pooler host |
-| `password authentication failed for user "postgres"` | Username is missing the project ref | Username is `postgres.<project-ref>`, not `postgres` |
+| `password authentication failed for user "postgres"` | Username is missing the project ref, or password from another project | Username is `postgres.<project-ref>` |
+| `the Url field is required` at startup, though the secret is set | Running outside Development, where user-secrets are not loaded | `$env:ASPNETCORE_ENVIRONMENT='Development'` |
 | `relation "patients" does not exist` | Schema not applied | Run `db/01_schema.sql` |
 | `bucket` reports `404` / `Bucket not found` | Bucket missing or misnamed | Create `documents`, or set `Supabase:Bucket` to match |
 | `bucket` reports `401` / `403` | Using the `anon` key | Use the `service_role` key |

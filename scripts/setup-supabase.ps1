@@ -21,10 +21,10 @@
 
 [CmdletBinding()]
 param(
-    [string]$ProjectRef = 'xfhdukhtoixzswjidkhn',
-    # Confirmed by probing every regional pooler for this tenant — the project lives in
-    # ap-south-1 (Mumbai), which is not what the IPv6 prefix of the direct host suggests.
-    [string]$Region     = 'ap-south-1',
+    [string]$ProjectRef = 'ypihdphtcacupdxxqbsc',
+    # Found by probing every regional pooler for this tenant. Do not infer the region from the
+    # direct host's IPv6 prefix — it disagrees with where the pooler actually serves the project.
+    [string]$Region     = 'ap-southeast-2',
     [string]$Bucket     = 'documents',
     [int]$Port          = 5000
 )
