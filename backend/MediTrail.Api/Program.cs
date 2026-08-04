@@ -60,6 +60,7 @@ builder.Services.AddHttpClient<IStorageService, SupabaseStorageService>((provide
 });
 
 builder.Services.AddSingleton<IPromptLibrary, PromptLibrary>();
+builder.Services.AddSingleton<IPdfRenderer, PdfRenderer>();
 
 var aiKey = builder.Configuration[$"{AiOptions.SectionName}:ApiKey"];
 

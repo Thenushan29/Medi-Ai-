@@ -7,10 +7,16 @@ namespace MediTrail.Api.AiPipeline;
 /// </summary>
 public interface IAiClient
 {
-    /// <summary>Sends a prompt with one image and returns the model's text.</summary>
-    Task<AiCompletion> CompleteWithImageAsync(
+    /// <summary>
+    /// Sends a prompt with one or more images and returns the model's text.
+    ///
+    /// Several images means several pages of **one** document, sent in a single call — a two-page
+    /// prescription is one prescribing event, and extracting each page separately would split the
+    /// medication list from the advice that qualifies it.
+    /// </summary>
+    Task<AiCompletion> CompleteWithImagesAsync(
         string systemPrompt,
-        byte[] image,
+        IReadOnlyList<byte[]> images,
         string imageContentType,
         string? model = null,
         CancellationToken ct = default);

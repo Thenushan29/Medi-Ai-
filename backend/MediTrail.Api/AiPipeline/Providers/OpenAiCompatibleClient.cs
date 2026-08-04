@@ -28,12 +28,34 @@ public sealed class OpenAiCompatibleClient(
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public Task<AiCompletion> CompleteWithImageAsync(
-        string systemPrompt, byte[] image, string imageContentType,
+    public Task<AiCompletion> CompleteWithImagesAsync(
+        string systemPrompt, IReadOnlyList<byte[]> images, string imageContentType,
         string? model = null, CancellationToken ct = default)
     {
-        // Images travel as a data URI in the message body — OpenRouter has no separate upload step.
-        var dataUri = $"data:{Normalize(imageContentType)};base64,{Convert.ToBase64String(image)}";
+        var mediaType = Normalize(imageContentType);
+
+        // The prompt first, then every page in order. Images travel as data URIs in the message
+        // body — these APIs have no separate upload step.
+        var content = new List<ContentPart>
+        {
+            new() { Type = "text", Text = systemPrompt }
+        };
+
+        for (var index = 0; index < images.Count; index++)
+        {
+            if (images.Count > 1)
+            {
+                // Labelled, so a multi-page document does not blur into one undifferentiated list
+                // and the model can tell which page a line came from.
+                content.Add(new ContentPart { Type = "text", Text = $"--- page {index + 1} of {images.Count} ---" });
+            }
+
+            content.Add(new ContentPart
+            {
+                Type = "image_url",
+                ImageUrl = new ImageUrl { Url = $"data:{mediaType};base64,{Convert.ToBase64String(images[index])}" }
+            });
+        }
 
         var request = new ChatRequest
         {
@@ -47,18 +69,7 @@ public sealed class OpenAiCompatibleClient(
                 ? new ReasoningConfig { Enabled = false }
                 : null,
             ReasoningEffort = _options.ResolveReasoningEffort(),
-            Messages =
-            [
-                new ChatMessage
-                {
-                    Role = "user",
-                    Content =
-                    [
-                        new ContentPart { Type = "text", Text = systemPrompt },
-                        new ContentPart { Type = "image_url", ImageUrl = new ImageUrl { Url = dataUri } }
-                    ]
-                }
-            ]
+            Messages = [new ChatMessage { Role = "user", Content = content }]
         };
 
         return SendAsync(request, ct);

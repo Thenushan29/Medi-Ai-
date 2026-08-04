@@ -14,24 +14,47 @@ namespace MediTrail.Api.AiPipeline.Extraction;
 public sealed class VisionDocumentExtractor(
     IAiClient ai,
     IPromptLibrary prompts,
+    IPdfRenderer pdfRenderer,
     ILogger<VisionDocumentExtractor> logger) : IDocumentExtractor
 {
     public async Task<ExtractionResult> ExtractAsync(ExtractionRequest request, CancellationToken ct = default)
     {
-        if (request.ContentType == "application/pdf")
-        {
-            // PDF page rendering is FR-2.7, and not wired yet. Say so rather than failing vaguely.
-            return ExtractionResult.Failure(
-                "PDF documents are not supported yet. Please upload a photo or scan as PNG or JPG.");
-        }
-
         var stopwatch = Stopwatch.StartNew();
         string? model = null;
 
+        IReadOnlyList<byte[]> pages;
+        string pageContentType;
+
+        if (request.ContentType == "application/pdf")
+        {
+            try
+            {
+                // Rendered to images and sent through the same vision path as a photo (FR-2.7).
+                // All pages go in one call: a two-page prescription is one prescribing event, and
+                // extracting each page alone would separate the medication list from the advice
+                // that qualifies it — which is exactly what the contradiction check needs together.
+                pages = pdfRenderer.Render(request.Content);
+                pageContentType = "image/png";
+
+                logger.LogInformation("Rendered {Pages} page(s) from PDF {DocumentId}",
+                    pages.Count, request.DocumentId);
+            }
+            catch (PdfRenderException ex)
+            {
+                logger.LogWarning(ex, "Could not render PDF {DocumentId}", request.DocumentId);
+                return ExtractionResult.Failure(ex.Message);
+            }
+        }
+        else
+        {
+            pages = [request.Content];
+            pageContentType = request.ContentType;
+        }
+
         try
         {
-            var completion = await ai.CompleteWithImageAsync(
-                prompts.Get("extraction"), request.Content, request.ContentType, ct: ct);
+            var completion = await ai.CompleteWithImagesAsync(
+                prompts.Get("extraction"), pages, pageContentType, ct: ct);
 
             model = completion.Model;
 
@@ -47,9 +70,9 @@ public sealed class VisionDocumentExtractor(
             var retryPrompt = prompts.Get("extraction.retry",
                 new Dictionary<string, string> { ["ERROR"] = error ?? "unknown" });
 
-            var retry = await ai.CompleteWithImageAsync(
+            var retry = await ai.CompleteWithImagesAsync(
                 $"{prompts.Get("extraction")}\n\n---\n\n{retryPrompt}",
-                request.Content, request.ContentType, ct: ct);
+                pages, pageContentType, ct: ct);
 
             model = retry.Model;
 

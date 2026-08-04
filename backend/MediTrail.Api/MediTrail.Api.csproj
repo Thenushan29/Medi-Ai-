@@ -24,6 +24,7 @@
          advisory GHSA-v5pm-xwqc-g5wc. 3.x breaks the ASP.NET OpenAPI source generator, so hold at 2.x. -->
     <PackageReference Include="Microsoft.OpenApi" Version="2.11.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="PDFtoImage" Version="5.3.0" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.16.17" />
   </ItemGroup>
 
