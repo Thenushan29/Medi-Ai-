@@ -72,6 +72,7 @@ public sealed class PatientAnalyzer(
 
             alerts.AddRange(await LowConfidenceAlertsAsync(patientId, ct));
 
+            alerts = Deduplicate(alerts);
             db.Alerts.AddRange(alerts);
 
             patient.Status = PatientStatus.Ready;
@@ -103,6 +104,38 @@ public sealed class PatientAnalyzer(
             await MarkFailedAsync(patient);
         }
     }
+
+    /// <summary>
+    /// Collapses findings that say the same thing.
+    ///
+    /// Uploading the same scan twice gives each copy its own warning row, and each then matches the
+    /// medications on both copies — so "Aspirin was prescribed despite a warning on the same
+    /// document" appeared twice for one warning on one page. The same shape occurs whenever two
+    /// rules, or a rule and the model, reach the same conclusion.
+    ///
+    /// The surviving alert keeps the highest confidence and the union of the evidence, so
+    /// collapsing never costs the user a document they could have opened.
+    /// </summary>
+    private static List<Alert> Deduplicate(List<Alert> alerts) =>
+        alerts
+            .GroupBy(a => (a.Type, Title: a.Title.Trim().ToLowerInvariant()))
+            .Select(group =>
+            {
+                var best = group.OrderByDescending(a => a.Confidence).First();
+
+                best.EvidenceDocumentIds = group
+                    .SelectMany(a => a.EvidenceDocumentIds)
+                    .Distinct()
+                    .ToList();
+
+                best.InvolvedGenerics = group
+                    .SelectMany(a => a.InvolvedGenerics)
+                    .Distinct()
+                    .ToList();
+
+                return best;
+            })
+            .ToList();
 
     /// <summary>
     /// Records the failure without the poisoned change tracker: the entities that just failed are
