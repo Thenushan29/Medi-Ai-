@@ -87,6 +87,13 @@ export class ApiService {
       .pipe(catchError(toReadableError));
   }
 
+  /** Removes one document and everything read from it; the backend re-runs the analysis. */
+  deleteDocument(documentId: string): Observable<void> {
+    return this.http
+      .delete<void>(`${this.base}/documents/${documentId}`)
+      .pipe(catchError(toReadableError));
+  }
+
   // ---- Analysis ----
 
   getAlerts(patientId: string): Observable<Alert[]> {

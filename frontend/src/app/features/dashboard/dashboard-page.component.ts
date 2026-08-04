@@ -107,10 +107,21 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
               } @else {
                 <ol class="space-y-3">
                   @for (entry of timeline(); track entry.documentId) {
-                    <li>
+                    <li class="relative">
+                      <!-- Outside the card link, so opening the evidence and removing the
+                           document are not the same tap. -->
+                      <button
+                        type="button"
+                        class="absolute right-3 top-3 z-10 rounded p-1 text-xs text-slate-400 hover:text-red-700"
+                        [attr.aria-label]="'Remove ' + entry.fileName"
+                        (click)="confirmRemoveDocument(entry)"
+                      >
+                        Remove
+                      </button>
+
                       <a
                         [routerLink]="['/documents', entry.documentId]"
-                        class="block rounded-xl border border-slate-200 bg-white px-5 py-4 hover:border-brand-500"
+                        class="block rounded-xl border border-slate-200 bg-white px-5 py-4 pr-20 hover:border-brand-500"
                       >
                         <div class="flex items-start justify-between gap-4">
                           <div class="min-w-0">
@@ -200,6 +211,26 @@ export class DashboardPageComponent {
   private readonly api = inject(ApiService);
 
   readonly patientId = input.required<string>();
+
+  /**
+   * Removes one document — a page uploaded by mistake, or one that turned out to belong to
+   * someone else. The backend re-runs the analysis, so the whole dashboard is reloaded rather
+   * than just the timeline row: alerts and medications derived from this document change too.
+   */
+  protected confirmRemoveDocument(entry: TimelineEntry): void {
+    const confirmed = confirm(
+      `Remove ${entry.fileName}?\n\n` +
+        'The file and everything read from it are deleted, and any finding based on it is ' +
+        'recalculated. This cannot be undone.'
+    );
+
+    if (!confirmed) return;
+
+    this.api.deleteDocument(entry.documentId).subscribe({
+      next: () => this.load(),
+      error: (err: Error) => this.error.set(err.message)
+    });
+  }
 
   /** Count badge per tab. Returns 0 for Timeline, which needs no count. */
   protected countFor(tab: Tab): number {

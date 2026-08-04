@@ -29,12 +29,14 @@ import type { PatientSummary } from '../../core/models';
           maxlength="200"
           class="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none placeholder:text-slate-400"
         />
+        <!-- The form is already open, so the label describes the action being confirmed,
+             not the thing being opened. -->
         <button
           type="submit"
           [disabled]="busy() || !newName.trim()"
           class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
-          New patient
+          Done
         </button>
       </form>
 
@@ -61,10 +63,20 @@ import type { PatientSummary } from '../../core/models';
       } @else {
         <ul class="space-y-3">
           @for (patient of patients(); track patient.id) {
-            <li>
+            <li class="relative">
+              <!-- Outside the card link, so opening a patient and deleting one are not the same tap. -->
+              <button
+                type="button"
+                class="absolute right-3 top-3 z-10 rounded p-1 text-xs text-slate-400 hover:text-red-700"
+                [attr.aria-label]="'Delete ' + patient.displayName"
+                (click)="confirmDelete(patient)"
+              >
+                Delete
+              </button>
+
               <a
                 [routerLink]="['/patients', patient.id]"
-                class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4 hover:border-brand-500"
+                class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4 pr-24 hover:border-brand-500"
               >
                 <div>
                   <p class="font-medium text-slate-900">{{ patient.displayName }}</p>
@@ -107,6 +119,26 @@ export class PatientsPageComponent {
 
   constructor() {
     this.load();
+  }
+
+  /**
+   * Deleting a patient removes their documents, everything read from them, and the stored files.
+   * It cannot be undone, so it is confirmed by name rather than by a bare "are you sure".
+   */
+  protected confirmDelete(patient: PatientSummary): void {
+    const documents = patient.documentCount === 1 ? '1 document' : `${patient.documentCount} documents`;
+
+    const confirmed = confirm(
+      `Delete ${patient.displayName} and ${documents}?\n\n` +
+        'The uploaded files and everything read from them are removed permanently. This cannot be undone.'
+    );
+
+    if (!confirmed) return;
+
+    this.api.deletePatient(patient.id).subscribe({
+      next: () => this.patients.update(list => list.filter(p => p.id !== patient.id)),
+      error: (err: Error) => this.error.set(err.message)
+    });
   }
 
   protected create(): void {

@@ -16,6 +16,13 @@ public interface IDocumentService
     Task<ProcessingStatusDto?> GetStatusAsync(Guid patientId, CancellationToken ct = default);
     Task<IReadOnlyList<TimelineEntryDto>> GetTimelineAsync(Guid patientId, CancellationToken ct = default);
     Task<DocumentDetailDto?> GetDocumentAsync(Guid documentId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Removes one document, its stored file and everything read from it. Returns the owning
+    /// patient so the caller can re-run the analysis — findings that cite a deleted document
+    /// would otherwise keep pointing at evidence that no longer exists.
+    /// </summary>
+    Task<Guid?> DeleteDocumentAsync(Guid documentId, CancellationToken ct = default);
 }
 
 public sealed class DocumentService(
@@ -306,6 +313,29 @@ public sealed class DocumentService(
                 Confidence = a.Confidence
             }).ToList()
         };
+    }
+
+    public async Task<Guid?> DeleteDocumentAsync(Guid documentId, CancellationToken ct = default)
+    {
+        var document = await db.Documents.FirstOrDefaultAsync(d => d.Id == documentId, ct);
+        if (document is null) return null;
+
+        var patientId = document.PatientId;
+
+        // The stored file goes first: an orphaned row can be cleaned up later, an orphaned
+        // document image cannot be found again.
+        //
+        // Only when no other row still points at it — an identical re-upload shares the extraction
+        // but each document keeps its own file, so this only matters if that ever changes.
+        await storage.DeleteAsync(document.StoragePath, ct);
+
+        // Cascades to this document's medications, lab results and allergies.
+        db.Documents.Remove(document);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Deleted document {DocumentId} from patient {PatientId}", documentId, patientId);
+
+        return patientId;
     }
 
     /// <summary>Format and size gate (FR-2.2, FR-2.3). Returns null when the file is acceptable.</summary>
