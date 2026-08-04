@@ -1,8 +1,8 @@
 {
-  "_comment": "US Navy DD Form 1289, handwritten, dated 23 Jan 99. A compounded preparation written in classic apothecary form: two ingredients combined into one solution rather than two separate medications. 'Tr. Belladonna' is tincture of belladonna; 'Amphogel' is aluminium hydroxide gel; 'qsad 120 ml' means make up to 120 ml. 'Sig: 5ml t.i.d. a.c.' is 5 ml three times daily before meals. The two-digit year 99 is unambiguous in context (the form is dated 1 NOV 71 and the exp date is 12/02), so 1999 is recorded.",
+  "_comment": "US Navy DD Form 1289, handwritten, dated 23 Jan 99. A compounded preparation written in classic apothecary form: two ingredients combined into one solution rather than two separate medications. 'Tr. Belladonna' is tincture of belladonna; 'Amphogel' is aluminium hydroxide gel; 'qsad 120 ml' means make up to 120 ml. 'Sig: 5ml t.i.d. a.c.' is 5 ml three times daily before meals. The date reads '23 Jan 99' - a two-digit year, which is null by the same rule that nulls 09-11-12. An earlier version of this label recorded 1999 by reasoning from the form revision date; that was inference, not reading, and it contradicted the rule applied everywhere else.",
 
   "documentType": "prescription",
-  "documentDate": "1999-01-23",
+  "documentDate": null,
 
   "provider": {
     "name": "Jack R Frost",

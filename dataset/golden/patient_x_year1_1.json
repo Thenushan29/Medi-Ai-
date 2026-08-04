@@ -5,8 +5,8 @@
   "documentDate": "2023-08-30",
 
   "provider": {
-    "_note": "The name is redacted on the scan; 'Dr. Ak' is all that is legible before the black bar. Recording what is readable, per the label rule of labelling what is printed.",
-    "name": "Dr. Ak",
+    "_note": "The prescriber name is redacted with a black bar; only a one or two letter fragment is legible. A fragment is not a usable name - which letters survive depends on where the bar lands - so this is null, consistent across all redacted headers.", 
+    "name": null,
     "facility": null
   },
 

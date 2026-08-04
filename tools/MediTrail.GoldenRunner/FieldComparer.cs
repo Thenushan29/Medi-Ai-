@@ -211,13 +211,27 @@ public static class FieldComparer
     /// page; scoring that as invention would punish the model for the labeller's shorthand and
     /// bury real hallucinations in noise.
     /// </summary>
+    /// <summary>
+    /// Fields where producing a value the label says is absent counts as a hallucination.
+    ///
+    /// Scoped to what §5.3 actually forbids — reporting "a medication, value, or date not present
+    /// in an uploaded document". Provider and document-type mismatches are wrong, but they are not
+    /// invented clinical content, and counting them here would drown the number that matters. The
+    /// evaluation set makes the difference concrete: five headers have the doctor's name behind a
+    /// black bar, and a model that returns the visible fragment is reading, not inventing.
+    /// </summary>
+    private static readonly HashSet<string> ClinicalCategories =
+        ["medications", "labValues", "allergies", "dates", "strengths", "frequencies", "warnings"];
+
     private static void Add(List<FieldResult> results, string category, string field,
         string? expected, string? actual, string? grounding = null)
     {
+        var invented = ClinicalCategories.Contains(category) ? Outcome.Hallucinated : Outcome.Wrong;
+
         var outcome = (Blank(expected), Blank(actual)) switch
         {
             (true, true) => Outcome.CorrectNull,
-            (true, false) => IsGrounded(actual!, grounding) ? Outcome.Correct : Outcome.Hallucinated,
+            (true, false) => IsGrounded(actual!, grounding) ? Outcome.Correct : invented,
             (false, true) => Outcome.Missed,
             _ => Matches(expected, actual) ? Outcome.Correct : Outcome.Wrong
         };

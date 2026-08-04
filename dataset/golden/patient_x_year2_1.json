@@ -5,6 +5,7 @@
   "documentDate": "2019-07-04",
 
   "provider": {
+    "_note": "The prescriber name is redacted with a black bar; only a one or two letter fragment is legible. A fragment is not a usable name - which letters survive depends on where the bar lands - so this is null, consistent across all redacted headers.", 
     "name": null,
     "facility": null
   },
