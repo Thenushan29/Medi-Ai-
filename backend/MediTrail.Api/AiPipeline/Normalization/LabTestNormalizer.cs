@@ -92,12 +92,56 @@ public static partial class LabTestNormalizer
     /// <summary>
     /// Whether a value falls outside the range printed on the document. Computed in code, never by
     /// the LLM (Principle 2), and only against a range the document itself supplied (FR-6.3).
+    ///
+    /// <paramref name="rangeText"/> covers one-sided ranges — an eGFR reported as "&gt; 90" has no
+    /// numeric bounds to compare against, so without this a result of 52 passes as in-range.
     /// </summary>
-    public static bool IsOutOfRange(decimal? value, decimal? min, decimal? max)
+    public static bool IsOutOfRange(decimal? value, decimal? min, decimal? max, string? rangeText = null)
     {
         if (value is null) return false;
+
+        if (min is null && max is null)
+        {
+            var (parsedMin, parsedMax) = ParseOneSidedRange(rangeText);
+            min = parsedMin;
+            max = parsedMax;
+        }
+
         if (min is null && max is null) return false;
 
         return (min is not null && value < min) || (max is not null && value > max);
+    }
+
+    /// <summary>Matches "&gt; 90", "&lt;=200", "under 150", "at least 12".</summary>
+    [GeneratedRegex(@"^\s*(>=?|<=?|greater than|less than|above|below|under|over|at least|max|min)\s*:?\s*(\d+(?:\.\d+)?)\s*\w*\s*$",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex OneSidedRange();
+
+    /// <summary>
+    /// Turns a one-sided reference range into a bound. Returns nulls for anything else — a range
+    /// that cannot be read stays unenforced rather than being guessed at.
+    /// </summary>
+    private static (decimal? Min, decimal? Max) ParseOneSidedRange(string? rangeText)
+    {
+        if (string.IsNullOrWhiteSpace(rangeText)) return (null, null);
+
+        var match = OneSidedRange().Match(rangeText.Trim());
+        if (!match.Success) return (null, null);
+
+        if (!decimal.TryParse(match.Groups[2].Value, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var bound))
+        {
+            return (null, null);
+        }
+
+        var op = match.Groups[1].Value.ToLowerInvariant();
+
+        // "> 90" means the healthy range starts at 90, so 90 is the lower bound.
+        return op switch
+        {
+            ">" or ">=" or "greater than" or "above" or "over" or "at least" or "min" => (bound, null),
+            "<" or "<=" or "less than" or "below" or "under" or "max" => (null, bound),
+            _ => (null, null)
+        };
     }
 }

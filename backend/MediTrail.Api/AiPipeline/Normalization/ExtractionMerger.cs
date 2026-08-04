@@ -152,7 +152,8 @@ public sealed class ExtractionMerger(
                 NormalRangeText = Trim(source.NormalRangeText),
                 // Falls back to the document date when the report prints no separate test date.
                 TestDate = DateNormalizer.Parse(source.TestDate) ?? document.DocumentDate,
-                IsOutOfRange = LabTestNormalizer.IsOutOfRange(source.ValueNumeric, source.NormalMin, source.NormalMax),
+                IsOutOfRange = LabTestNormalizer.IsOutOfRange(
+                    source.ValueNumeric, source.NormalMin, source.NormalMax, source.NormalRangeText),
                 SourceText = Trim(source.SourceText),
                 Confidence = source.Confidence
             });

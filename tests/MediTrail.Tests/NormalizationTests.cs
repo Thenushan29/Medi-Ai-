@@ -177,6 +177,24 @@ public class DateNormalizerTests
 public class LabTestNormalizerTests
 {
     [Theory]
+    // A one-sided range has no numeric bounds, so without parsing it the check silently passes.
+    // Found by running an unseen prescription through the pipeline: eGFR 52 against "> 90".
+    [InlineData(52, "> 90", true)]
+    [InlineData(95, "> 90", false)]
+    [InlineData(240, "< 200", true)]
+    [InlineData(180, "< 200", false)]
+    [InlineData(52, "greater than 90", true)]
+    [InlineData(4.8, "2.0 - 3.0", false)]      // two-sided text is left to the numeric bounds
+    [InlineData(52, "see report", false)]      // unreadable range stays unenforced, never guessed
+    [InlineData(52, null, false)]
+    public void FlagsValuesOutsideAOneSidedPrintedRange(decimal value, string? rangeText, bool expected) =>
+        Assert.Equal(expected, LabTestNormalizer.IsOutOfRange(value, null, null, rangeText));
+
+    [Fact]
+    public void PrefersNumericBoundsOverTheTextRange() =>
+        Assert.True(LabTestNormalizer.IsOutOfRange(4.8m, 2.0m, 3.0m, "> 90"));
+
+    [Theory]
     // Without this the same test charts as several one-point series and no trend is visible.
     [InlineData("SGPT", "alt")]
     [InlineData("ALT (SGPT)", "alt")]
