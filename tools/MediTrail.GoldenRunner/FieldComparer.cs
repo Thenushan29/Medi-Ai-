@@ -67,12 +67,14 @@ public static class FieldComparer
 
             remaining.Remove(got);
 
-            Add(results, "medications", $"{key}.genericName", want.GenericName, got.GenericName);
-            Add(results, "medications", $"{key}.brandName", want.BrandName, got.BrandName);
-            Add(results, "strengths", $"{key}.strength", Format(want.StrengthValue), Format(got.StrengthValue));
-            Add(results, "strengths", $"{key}.strengthUnit", want.StrengthUnit, got.StrengthUnit);
-            Add(results, "frequencies", $"{key}.frequencyPerDay", Format(want.FrequencyPerDay), Format(got.FrequencyPerDay));
-            Add(results, "frequencies", $"{key}.durationDays", want.DurationDays?.ToString(), got.DurationDays?.ToString());
+            var source = want.SourceText;
+
+            Add(results, "medications", $"{key}.genericName", want.GenericName, got.GenericName, source);
+            Add(results, "medications", $"{key}.brandName", want.BrandName, got.BrandName, source);
+            Add(results, "strengths", $"{key}.strength", Format(want.StrengthValue), Format(got.StrengthValue), source);
+            Add(results, "strengths", $"{key}.strengthUnit", want.StrengthUnit, got.StrengthUnit, source);
+            Add(results, "frequencies", $"{key}.frequencyPerDay", Format(want.FrequencyPerDay), Format(got.FrequencyPerDay), source);
+            Add(results, "frequencies", $"{key}.durationDays", want.DurationDays?.ToString(), got.DurationDays?.ToString(), source);
         }
 
         // Anything left over was never in the ground truth — a medication that does not exist.
@@ -104,12 +106,14 @@ public static class FieldComparer
 
             remaining.Remove(got);
 
+            var source = want.SourceText;
+
             Add(results, "labValues", $"{key}.value", Format(want.ValueNumeric) ?? want.ValueText,
-                Format(got.ValueNumeric) ?? got.ValueText);
-            Add(results, "labValues", $"{key}.unit", want.Unit, got.Unit);
-            Add(results, "labValues", $"{key}.normalMin", Format(want.NormalMin), Format(got.NormalMin));
-            Add(results, "labValues", $"{key}.normalMax", Format(want.NormalMax), Format(got.NormalMax));
-            Add(results, "dates", $"{key}.testDate", want.TestDate, got.TestDate);
+                Format(got.ValueNumeric) ?? got.ValueText, source);
+            Add(results, "labValues", $"{key}.unit", want.Unit, got.Unit, source);
+            Add(results, "labValues", $"{key}.normalMin", Format(want.NormalMin), Format(got.NormalMin), source);
+            Add(results, "labValues", $"{key}.normalMax", Format(want.NormalMax), Format(got.NormalMax), source);
+            Add(results, "dates", $"{key}.testDate", want.TestDate, got.TestDate, source);
         }
 
         foreach (var extra in remaining)
@@ -177,17 +181,38 @@ public static class FieldComparer
         }
     }
 
-    private static void Add(List<FieldResult> results, string category, string field, string? expected, string? actual)
+    /// <summary>
+    /// <paramref name="grounding"/> is the label's own <c>sourceText</c> for this item.
+    ///
+    /// A hallucination is a value that **is not in the document** — not merely a field the labeller
+    /// chose to leave empty. When a label records only <c>genericName: "amoxicillin"</c> and the
+    /// model also fills <c>brandName: "Amoxicillin"</c>, the word is printed right there on the
+    /// page; scoring that as invention would punish the model for the labeller's shorthand and
+    /// bury real hallucinations in noise.
+    /// </summary>
+    private static void Add(List<FieldResult> results, string category, string field,
+        string? expected, string? actual, string? grounding = null)
     {
         var outcome = (Blank(expected), Blank(actual)) switch
         {
             (true, true) => Outcome.CorrectNull,
-            (true, false) => Outcome.Hallucinated,
+            (true, false) => IsGrounded(actual!, grounding) ? Outcome.Correct : Outcome.Hallucinated,
             (false, true) => Outcome.Missed,
             _ => Matches(expected, actual) ? Outcome.Correct : Outcome.Wrong
         };
 
         results.Add(new FieldResult(category, field, expected, actual, outcome));
+    }
+
+    /// <summary>True when the value actually appears in the document text the label recorded.</summary>
+    private static bool IsGrounded(string actual, string? grounding)
+    {
+        if (Blank(grounding)) return false;
+
+        var haystack = Canonical(grounding!);
+        var needle = Canonical(actual);
+
+        return needle.Length > 0 && haystack.Contains(needle, StringComparison.Ordinal);
     }
 
     private static bool Blank(string? value) => string.IsNullOrWhiteSpace(value);

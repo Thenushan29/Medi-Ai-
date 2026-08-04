@@ -1,23 +1,24 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace MediTrail.Api.AiPipeline.Extraction;
 
 /// <summary>
 /// Pulls a JSON object out of a model response.
 ///
-/// The prompt forbids code fences and prose, and mostly that holds — but a wrapper is a *formatting*
-/// slip, not a content error, and failing the document over it would throw away a good extraction.
-/// Anything beyond unwrapping is left alone: §11.5 requires malformed output to be retried once and
-/// then failed, never silently repaired into something the model did not say.
+/// The prompt forbids code fences and prose, and mostly that holds — but wrappers are a *formatting*
+/// slip, not a content error, and failing the document over one would throw away a good extraction.
+/// Anything beyond locating the object is left alone: §11.5 requires malformed output to be retried
+/// once and then failed, never silently repaired into something the model did not say.
 /// </summary>
-public static class JsonResponseReader
+public static partial class JsonResponseReader
 {
     public static bool TryRead<T>(string response, out T? value, out string? error)
     {
         value = default;
         error = null;
 
-        var json = Unwrap(response);
+        var json = Extract(response);
 
         if (string.IsNullOrWhiteSpace(json))
         {
@@ -53,14 +54,52 @@ public static class JsonResponseReader
         ReadCommentHandling = JsonCommentHandling.Skip
     };
 
-    /// <summary>Strips a markdown fence and any text either side of the outermost JSON object.</summary>
-    private static string Unwrap(string response)
+    // Reasoning models emit their working before the answer. Qwen and DeepSeek use <think>,
+    // and that working is full of illustrative JSON fragments — so it has to be removed before
+    // looking for the object, not merely skipped over.
+    [GeneratedRegex(@"<(think|thinking|reasoning)>.*?</\1>", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+    private static partial Regex ThinkBlock();
+
+    [GeneratedRegex(@"<(think|thinking|reasoning)>.*$", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+    private static partial Regex UnclosedThinkBlock();
+
+    private static string Extract(string response)
     {
-        var text = response.Trim();
+        var text = ThinkBlock().Replace(response, string.Empty);
 
+        // A truncated response can leave <think> unclosed, which would otherwise swallow nothing
+        // and leave the whole transcript in place.
+        if (text.Contains("<think", StringComparison.OrdinalIgnoreCase))
+        {
+            text = UnclosedThinkBlock().Replace(text, string.Empty);
+        }
+
+        text = text.Trim();
+
+        // Scan for a brace-balanced object, ignoring braces inside string literals. Taking
+        // first '{' to last '}' would break on any stray brace in trailing commentary.
         var start = text.IndexOf('{');
-        var end = text.LastIndexOf('}');
+        if (start < 0) return string.Empty;
 
-        return start >= 0 && end > start ? text[start..(end + 1)] : string.Empty;
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+
+        for (var i = start; i < text.Length; i++)
+        {
+            var c = text[i];
+
+            if (escaped) { escaped = false; continue; }
+            if (c == '\\' && inString) { escaped = true; continue; }
+            if (c == '"') { inString = !inString; continue; }
+            if (inString) continue;
+
+            if (c == '{') depth++;
+            else if (c == '}' && --depth == 0) return text[start..(i + 1)];
+        }
+
+        // Unbalanced — the response was cut off. Return it anyway so the parser reports the
+        // truncation, which is more useful to the retry than "no JSON found".
+        return text[start..];
     }
 }

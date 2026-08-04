@@ -1,0 +1,36 @@
+{
+  "_comment": "Handwritten US script, dark low-contrast scan. No strength is printed anywhere, so strengthValue must be null rather than a typical paediatric amoxicillin dose.",
+
+  "documentType": "prescription",
+  "documentDate": "2011-07-15",
+
+  "provider": {
+    "name": "John Smith, MD",
+    "facility": null
+  },
+
+  "patient": {
+    "name": "Jamie Woodley"
+  },
+
+  "diagnoses": [],
+
+  "medications": [
+    {
+      "brandName": null,
+      "genericName": "amoxicillin",
+      "strengthValue": null,
+      "strengthUnit": null,
+      "dose": "1 teaspoon",
+      "frequency": "BID",
+      "frequencyPerDay": 2,
+      "route": "PO",
+      "durationDays": 10,
+      "sourceText": "Amoxicillin 1 teaspoon PO BID x 10 days"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": []
+}

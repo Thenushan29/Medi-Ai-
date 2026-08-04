@@ -1,0 +1,96 @@
+{
+  "_comment": "THE headline trap (traps.md Y1). Paracetamol is prescribed while the same page advises avoiding liver-toxic medications 'e.g. alcohol, acetaminophen'. Both must be extracted faithfully; the contradiction is found later, and suppressing either side destroys the finding. Date '01/11/2025' is ambiguous (DD/MM vs MM/DD, both parts <= 12) so it is null per PRD 11.3. The investigations are SUGGESTED tests with no values, so labResults is empty.",
+
+  "documentType": "prescription",
+  "documentDate": null,
+
+  "provider": {
+    "name": "Ashraful Mollah",
+    "facility": null
+  },
+
+  "patient": {
+    "name": "Priya Sharma",
+    "age": "27",
+    "sex": "F"
+  },
+
+  "diagnoses": [
+    { "text": "Jaundice", "sourceText": "Diagnosis: Jaundice (Likely Viral Hepatitis)" }
+  ],
+
+  "medications": [
+    {
+      "brandName": "Udiliv",
+      "genericName": "ursodeoxycholic acid",
+      "strengthValue": 300,
+      "strengthUnit": "mg",
+      "dose": "1 tab PO",
+      "frequency": "Twice daily",
+      "frequencyPerDay": 2,
+      "route": "PO",
+      "sourceText": "Ursodeoxycholic 300 mg (e.g. Udiliv, Ursocol) 1 tab PO Twice daily 2-4 weeks"
+    },
+    {
+      "brandName": "Becosules",
+      "genericName": "vitamin b complex",
+      "strengthValue": null,
+      "strengthUnit": null,
+      "dose": "1 tab PO",
+      "frequency": "Once daily",
+      "frequencyPerDay": 1,
+      "route": "PO",
+      "sourceText": "Vitamin B Complex (e.g. Becosules) 1 tab PO Once daily 2-4 weeks"
+    },
+    {
+      "brandName": "Silybon",
+      "genericName": "silymarin",
+      "strengthValue": 140,
+      "strengthUnit": "mg",
+      "dose": "1 tab PO",
+      "frequency": "Twice daily",
+      "frequencyPerDay": 2,
+      "route": "PO",
+      "sourceText": "Silymarin 140 mg (e.g. Silybon, Hepamerz) 1 tab PO Twice daily 2-4 weeks"
+    },
+    {
+      "brandName": "Pantocid",
+      "genericName": "pantoprazole",
+      "strengthValue": 40,
+      "strengthUnit": "mg",
+      "dose": "1 tab PO",
+      "frequency": "Once daily",
+      "frequencyPerDay": 1,
+      "route": "PO",
+      "sourceText": "Pantoprazole 40 mg (e.g. Pantocid, Pensec) 1 tab PO Once daily 2-4 weeks"
+    },
+    {
+      "brandName": "Crocin",
+      "genericName": "paracetamol",
+      "strengthValue": 500,
+      "strengthUnit": "mg",
+      "dose": "1 tab PO",
+      "frequency": "Every 6 hours",
+      "frequencyPerDay": 4,
+      "route": "PO",
+      "instructions": "Only if fever > 101F, as needed",
+      "sourceText": "Paracetamol 500mg (e.g. Crocin) 1 tab PO Only if fever > 101F Every 6 hours As needed"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+
+  "warningsInDocument": [
+    {
+      "text": "Avoid taking unnecessary or liver-toxic medications (e.g. alcohol, acetaminophen)",
+      "relatesTo": ["acetaminophen", "alcohol"],
+      "sourceText": "Avoid taking unnecessary or liver-toxic medications (e.g.alcohol, acetaminophen)."
+    },
+    {
+      "text": "Avoid alcohol and smoking completely",
+      "relatesTo": ["alcohol"],
+      "sourceText": "Avoid alcohol and smoking completely."
+    }
+  ]
+}

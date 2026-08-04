@@ -1,0 +1,70 @@
+{
+  "_comment": "Clinic-software prescription. Every brand prints its generic on the line beneath, so genericName should come from the document rather than model memory (traps.md X3). ABCIXIMAB is prescribed as an oral tablet for malaria, which is clinically odd - transcribe it as printed, do not correct it (X4). Date '30-Aug-2023' is unambiguous.",
+
+  "documentType": "prescription",
+  "documentDate": "2023-08-30",
+
+  "provider": {
+    "name": null,
+    "facility": null
+  },
+
+  "patient": {
+    "age": "13",
+    "sex": "M"
+  },
+
+  "diagnoses": [
+    { "text": "Malaria", "sourceText": "* MALARIA" }
+  ],
+
+  "medications": [
+    {
+      "brandName": "ABCIXIMAB",
+      "genericName": "abciximab",
+      "strengthValue": null,
+      "strengthUnit": null,
+      "frequency": "1 Morning",
+      "frequencyPerDay": 1,
+      "durationDays": 8,
+      "sourceText": "TAB. ABCIXIMAB  1 Morning  8 Days (Tot:8 Tab)"
+    },
+    {
+      "brandName": "VOMILAST",
+      "genericName": "doxylamine/pyridoxine/folic acid",
+      "strengthValue": null,
+      "strengthUnit": null,
+      "frequency": "1 Morning, 1 Night",
+      "frequencyPerDay": 2,
+      "durationDays": 8,
+      "instructions": "After Food",
+      "sourceText": "TAB. VOMILAST  1 Morning, 1 Night (After Food)  8 Days (Tot:16 Tab)  DOXYLAMINE 10MG + PYRIDOXINE 10 MG + FOLIC ACID 2.5 MG"
+    },
+    {
+      "brandName": "ZOCLAR 500",
+      "genericName": "clarithromycin",
+      "strengthValue": 500,
+      "strengthUnit": "mg",
+      "frequency": "1 Morning",
+      "frequencyPerDay": 1,
+      "durationDays": 3,
+      "sourceText": "CAP. ZOCLAR 500  1 Morning  3 Days (Tot:3 Cap)  CLARITHROMYCIN IP 500MG"
+    },
+    {
+      "brandName": "GESTAKIND 10/SR",
+      "genericName": "isoxsuprine",
+      "strengthValue": 10,
+      "strengthUnit": "mg",
+      "frequency": "1 Night",
+      "frequencyPerDay": 1,
+      "durationDays": 4,
+      "sourceText": "TAB. GESTAKIND 10/SR  1 Night  4 Days (Tot:4 Tab)  ISOXSUPRINE 10 MG"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": [],
+
+  "followUpDate": "2023-09-04"
+}
