@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MediTrail.Api.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,6 +19,12 @@ public class MediTrailDbContext(DbContextOptions<MediTrailDbContext> options) : 
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        // jsonb, text[] and uuid[] are Postgres types. Applying them unconditionally makes the
+        // model unusable under the in-memory provider, and the deterministic cross-checks are
+        // exactly the part most worth unit-testing — so the Postgres-specific mappings are
+        // applied only when the provider is Postgres. Production behaviour is unchanged.
+        var isPostgres = Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) ?? false;
+
         // Enums persist as text, not ints — readable in psql and stable if a member is inserted later.
         b.Entity<Patient>(e =>
         {
@@ -31,7 +38,18 @@ public class MediTrailDbContext(DbContextOptions<MediTrailDbContext> options) : 
         {
             e.ToTable("documents");
             e.Property(x => x.Status).HasConversion<string>().HasMaxLength(32);
-            e.Property(x => x.RawExtractionJson).HasColumnType("jsonb");
+
+            if (isPostgres)
+            {
+                e.Property(x => x.RawExtractionJson).HasColumnType("jsonb");
+            }
+            else
+            {
+                e.Property(x => x.RawExtractionJson).HasConversion(
+                    document => document == null ? null : document.RootElement.GetRawText(),
+                    text => text == null ? null : JsonDocument.Parse(text, default));
+            }
+
             e.Property(x => x.OriginalFileName).HasMaxLength(500);
             e.Property(x => x.ContentType).HasMaxLength(120);
             e.Property(x => x.StoragePath).HasMaxLength(600);
@@ -88,7 +106,7 @@ public class MediTrailDbContext(DbContextOptions<MediTrailDbContext> options) : 
             e.ToTable("allergies");
             e.Property(x => x.Substance).HasMaxLength(500);
             e.Property(x => x.SubstanceGeneric).HasMaxLength(200);
-            e.Property(x => x.RelatesTo).HasColumnType("text[]");
+            if (isPostgres) e.Property(x => x.RelatesTo).HasColumnType("text[]");
 
             e.HasOne(x => x.Document)
                 .WithMany(d => d.Allergies)
@@ -105,8 +123,11 @@ public class MediTrailDbContext(DbContextOptions<MediTrailDbContext> options) : 
             e.Property(x => x.Severity).HasConversion<string>().HasMaxLength(16);
             e.Property(x => x.VerificationStatus).HasConversion<string>().HasMaxLength(24);
             e.Property(x => x.Title).HasMaxLength(300);
-            e.Property(x => x.InvolvedGenerics).HasColumnType("text[]");
-            e.Property(x => x.EvidenceDocumentIds).HasColumnType("uuid[]");
+            if (isPostgres)
+            {
+                e.Property(x => x.InvolvedGenerics).HasColumnType("text[]");
+                e.Property(x => x.EvidenceDocumentIds).HasColumnType("uuid[]");
+            }
 
             e.HasOne(x => x.Patient)
                 .WithMany(p => p.Alerts)
