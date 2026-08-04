@@ -90,14 +90,16 @@ public sealed class ExtractionMerger(
             var generic = DrugNameNormalizer.Normalize(source.GenericName)
                 ?? DrugNameNormalizer.GenericForBrand(source.BrandName);
 
-            // A brand with no resolved generic still deserves a row — the user must see everything
-            // that was on the page (US-2). It simply cannot participate in generic-keyed checks.
-            if (generic is null && DrugNameNormalizer.IsPlaceholder(source.BrandName))
-            {
-                // "DEMO MEDICINE 1" is not a drug. Recording it as one would put a fictional
-                // medication in a patient's record (traps.md X6).
-                continue;
-            }
+            // A placeholder such as "DEMO MEDICINE 1" keeps its row but never gets a generic.
+            //
+            // Dropping the row outright was worse: a page whose every line is a placeholder then
+            // produced a document marked read, at confidence 90, with an empty dashboard and no
+            // explanation — the user cannot tell that from a broken import. US-2 requires them to
+            // see everything that was found so they can confirm nothing was missed.
+            //
+            // A null generic already keeps it out of every cross-check, so it cannot generate a
+            // finding about a medicine that does not exist (traps.md X6), and the Medications view
+            // labels the group "generic not identified".
 
             // The model's own frequencyPerDay is a fallback: parsing the printed text is
             // reproducible, and the printed text is the evidence the user can check.

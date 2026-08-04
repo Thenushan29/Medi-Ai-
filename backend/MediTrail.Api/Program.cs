@@ -162,6 +162,21 @@ app.MapOpenApi();
 app.MapScalarApiReference(options => options.WithTitle("MediTrail API"));
 
 app.UseCors(CorsPolicy);
+
+// Every API response is a live view of the record, so none of it may be cached. Without this the
+// browser reuses a GET it already has: delete a document and the timeline still shows it until the
+// page is reloaded, which reads as the delete having failed.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+        context.Response.Headers.Pragma = "no-cache";
+    }
+
+    await next();
+});
+
 app.MapControllers();
 
 // Target for the uptime ping that keeps the free tier from sleeping during judging (§19).
