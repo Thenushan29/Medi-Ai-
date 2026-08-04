@@ -184,6 +184,107 @@ export interface Allergy {
   confidence?: number;
 }
 
+export type AlertType =
+  | 'DuplicatePrescription'
+  | 'DosageConflict'
+  | 'DrugInteraction'
+  | 'AllergyConflict'
+  | 'DocumentWarningConflict'
+  | 'LabOutOfRange'
+  | 'LabDrift'
+  | 'LowExtractionConfidence';
+
+export interface EvidenceRef {
+  documentId: string;
+  fileName: string;
+  sourceUrl: string;
+  documentDate?: string;
+}
+
+export interface Alert {
+  id: string;
+  type: AlertType;
+  severity: AlertSeverity;
+  title: string;
+  involvedGenerics: string[];
+  explanationEn?: string;
+  explanationTa?: string;
+  suggestedActionEn?: string;
+  suggestedActionTa?: string;
+  confidence: number;
+  requiresProfessionalConsult: boolean;
+  verificationStatus: VerificationStatus;
+  verificationExcerpt?: string;
+  verificationSource?: string;
+  evidence: EvidenceRef[];
+  /** "rules" or "llm" — a computed finding is not labelled AI-generated (§17.3). */
+  detectedBy?: string;
+}
+
+export interface MedicationGroup {
+  genericName?: string;
+  displayName: string;
+  therapeuticClass?: string;
+  rows: MedicationRow[];
+  alertIds: string[];
+  hasConflict: boolean;
+  firstPrescribed?: string;
+  lastPrescribed?: string;
+}
+
+export interface MedicationRow {
+  id: string;
+  documentId: string;
+  sourceUrl: string;
+  brandName?: string;
+  strengthValue?: number;
+  strengthUnit?: string;
+  frequency?: string;
+  frequencyPerDay?: number;
+  durationDays?: number;
+  instructions?: string;
+  providerName?: string;
+  startDate?: string;
+  endDate?: string;
+  sourceText?: string;
+  confidence?: number;
+}
+
+export type TrendDirection = 'Insufficient' | 'Rising' | 'Falling' | 'Stable';
+
+export interface LabTrend {
+  testKey: string;
+  displayName: string;
+  unit?: string;
+  normalMin?: number;
+  normalMax?: number;
+  normalRangeText?: string;
+  direction: TrendDirection;
+  percentChange?: number;
+  outOfRangeCount: number;
+  latestOutOfRange: boolean;
+  points: LabTrendPoint[];
+  explanationEn?: string;
+  explanationTa?: string;
+  confidence: number;
+}
+
+export interface LabTrendPoint {
+  date: string;
+  value: number;
+  isOutOfRange: boolean;
+  documentId: string;
+}
+
+export interface ChatAnswer {
+  answerEn: string;
+  answerTa?: string;
+  citations: string[];
+  confidence: number;
+  consultProfessional: boolean;
+  foundInDocuments: boolean;
+}
+
 export interface ApiError {
   code: string;
   message: string;

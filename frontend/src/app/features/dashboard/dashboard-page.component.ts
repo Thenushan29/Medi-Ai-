@@ -4,15 +4,27 @@ import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
 import { ConfidenceBadgeComponent } from '../../shared/confidence-badge.component';
-import type { PatientDetail, TimelineEntry } from '../../core/models';
+import { AlertsViewComponent } from './alerts-view.component';
+import { ChatDrawerComponent } from './chat-drawer.component';
+import { LabTrendsViewComponent } from './lab-trends-view.component';
+import { MedicationsViewComponent } from './medications-view.component';
+import type { Alert, LabTrend, MedicationGroup, PatientDetail, TimelineEntry } from '../../core/models';
 
 type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
 
-/** Dashboard shell (§10.4) plus the Timeline view (§10.5). */
+/** Dashboard shell (§10.4) with all four views and the chat drawer. */
 @Component({
   selector: 'mt-dashboard-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, RouterLink, ConfidenceBadgeComponent],
+  imports: [
+    DatePipe,
+    RouterLink,
+    ConfidenceBadgeComponent,
+    AlertsViewComponent,
+    MedicationsViewComponent,
+    LabTrendsViewComponent,
+    ChatDrawerComponent
+  ],
   template: `
     <section class="mx-auto max-w-5xl px-6 py-10">
       @if (patient(); as p) {
@@ -69,6 +81,16 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
               (click)="tab.set(t.key)"
             >
               {{ t.label }}
+              @if (countFor(t.key); as count) {
+                <span
+                  class="ml-1.5 rounded-full px-1.5 py-0.5 text-xs"
+                  [class]="t.key === 'alerts' && p.redAlertCount > 0
+                    ? 'bg-red-100 text-red-800'
+                    : 'bg-slate-100 text-slate-600'"
+                >
+                  {{ count }}
+                </span>
+              }
             </button>
           }
         </nav>
@@ -137,13 +159,35 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
                 </ol>
               }
             }
-            @default {
-              <p class="rounded-xl border border-dashed border-slate-300 px-6 py-12 text-center text-sm text-slate-500">
-                Cross-checking has not run for these documents yet.
-              </p>
+            @case ('alerts') {
+              <mt-alerts-view [alerts]="alerts()" />
+            }
+            @case ('medications') {
+              <mt-medications-view [groups]="medications()" />
+            }
+            @case ('labs') {
+              <mt-lab-trends-view [trends]="labTrends()" />
             }
           }
         </div>
+
+        <!-- Chat drawer trigger. Kept out of the tab strip: it is available from every view. -->
+        <button
+          type="button"
+          class="fixed bottom-6 right-6 z-30 rounded-full bg-brand-600 px-5 py-3 text-sm font-medium text-white shadow-lg"
+          (click)="chatOpen.set(true)"
+        >
+          Ask about your records
+        </button>
+
+        @if (chatOpen()) {
+          <mt-chat-drawer
+            [patientId]="p.id"
+            [ready]="p.status === 'Ready' || p.status === 'Failed'"
+            [documents]="timeline()"
+            (closed)="chatOpen.set(false)"
+          />
+        }
       } @else if (error(); as message) {
         <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ message }}</p>
       } @else {
@@ -157,6 +201,20 @@ export class DashboardPageComponent {
 
   readonly patientId = input.required<string>();
 
+  /** Count badge per tab. Returns 0 for Timeline, which needs no count. */
+  protected countFor(tab: Tab): number {
+    switch (tab) {
+      case 'alerts':
+        return this.alerts().length;
+      case 'medications':
+        return this.medications().length;
+      case 'labs':
+        return this.labTrends().length;
+      default:
+        return 0;
+    }
+  }
+
   protected readonly tabs: { key: Tab; label: string }[] = [
     { key: 'timeline', label: 'Timeline' },
     { key: 'medications', label: 'Medications' },
@@ -167,6 +225,10 @@ export class DashboardPageComponent {
   protected readonly tab = signal<Tab>('timeline');
   protected readonly patient = signal<PatientDetail | null>(null);
   protected readonly timeline = signal<TimelineEntry[]>([]);
+  protected readonly alerts = signal<Alert[]>([]);
+  protected readonly medications = signal<MedicationGroup[]>([]);
+  protected readonly labTrends = signal<LabTrend[]>([]);
+  protected readonly chatOpen = signal(false);
   protected readonly error = signal<string | null>(null);
 
   /** "2021 – 2024", or a single year when everything falls in one (§10.4 header chips). */
@@ -183,15 +245,25 @@ export class DashboardPageComponent {
     queueMicrotask(() => this.load());
   }
 
+  /**
+   * Each view loads independently. One failing endpoint leaves the others usable — a broken
+   * lab-trend call should not blank out the alerts someone came here to read.
+   */
   private load(): void {
-    this.api.getPatient(this.patientId()).subscribe({
+    const id = this.patientId();
+
+    this.api.getPatient(id).subscribe({
       next: patient => this.patient.set(patient),
       error: (err: Error) => this.error.set(err.message)
     });
 
-    this.api.getTimeline(this.patientId()).subscribe({
+    this.api.getTimeline(id).subscribe({
       next: entries => this.timeline.set(entries),
       error: (err: Error) => this.error.set(err.message)
     });
+
+    this.api.getAlerts(id).subscribe({ next: alerts => this.alerts.set(alerts) });
+    this.api.getMedications(id).subscribe({ next: groups => this.medications.set(groups) });
+    this.api.getLabTrends(id).subscribe({ next: trends => this.labTrends.set(trends) });
   }
 }

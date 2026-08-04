@@ -4,8 +4,12 @@ import { Observable, catchError, throwError } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import type {
+  Alert,
+  ChatAnswer,
   CreatePatientRequest,
   DocumentDetail,
+  LabTrend,
+  MedicationGroup,
   PatientDetail,
   PatientSummary,
   ProcessingStatus,
@@ -80,6 +84,32 @@ export class ApiService {
   getDocument(documentId: string): Observable<DocumentDetail> {
     return this.http
       .get<DocumentDetail>(`${this.base}/documents/${documentId}`)
+      .pipe(catchError(toReadableError));
+  }
+
+  // ---- Analysis ----
+
+  getAlerts(patientId: string): Observable<Alert[]> {
+    return this.http
+      .get<Alert[]>(`${this.base}/patients/${patientId}/alerts`)
+      .pipe(catchError(toReadableError));
+  }
+
+  getMedications(patientId: string): Observable<MedicationGroup[]> {
+    return this.http
+      .get<MedicationGroup[]>(`${this.base}/patients/${patientId}/medications`)
+      .pipe(catchError(toReadableError));
+  }
+
+  getLabTrends(patientId: string): Observable<LabTrend[]> {
+    return this.http
+      .get<LabTrend[]>(`${this.base}/patients/${patientId}/labs`)
+      .pipe(catchError(toReadableError));
+  }
+
+  ask(patientId: string, question: string): Observable<ChatAnswer> {
+    return this.http
+      .post<ChatAnswer>(`${this.base}/patients/${patientId}/ask`, { question })
       .pipe(catchError(toReadableError));
   }
 }
