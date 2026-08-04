@@ -1,7 +1,11 @@
 using System.Text.Json.Serialization;
 using MediTrail.Api.AiPipeline;
+using MediTrail.Api.AiPipeline.CrossCheck;
 using MediTrail.Api.AiPipeline.Extraction;
+using MediTrail.Api.AiPipeline.Normalization;
 using MediTrail.Api.AiPipeline.Providers;
+using MediTrail.Api.AiPipeline.RuleChecks;
+using MediTrail.Api.AiPipeline.Verification;
 using MediTrail.Api.Configuration;
 using MediTrail.Api.Data;
 using MediTrail.Api.Middleware;
@@ -70,7 +74,22 @@ else
         AiHttpClient.Configure(client, provider.GetRequiredService<IOptions<AiOptions>>().Value));
 
     builder.Services.AddScoped<IDocumentExtractor, VisionDocumentExtractor>();
+    builder.Services.AddScoped<IInteractionCrossChecker, InteractionCrossChecker>();
 }
+
+// openFDA is an optional enhancement, never a hard dependency (§14.4) — registered whether or not
+// an AI key exists, and its failures never remove a finding.
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<IOpenFdaClient, OpenFdaClient>((provider, client) =>
+{
+    var fda = provider.GetRequiredService<IOptions<OpenFdaOptions>>().Value;
+    client.BaseAddress = new Uri(fda.BaseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(fda.TimeoutSeconds);
+});
+
+builder.Services.AddScoped<IExtractionMerger, ExtractionMerger>();
+builder.Services.AddScoped<IRuleChecker, DeterministicRuleChecker>();
+builder.Services.AddScoped<IPatientAnalyzer, PatientAnalyzer>();
 
 // ---------------------------------------------------------------------------
 // Background processing (§14.3)

@@ -170,15 +170,15 @@ public sealed class ProcessingWorker(
         }
         finally
         {
-            await TryAdvancePatientAsync(db, job.PatientId, ct);
+            await TryAdvancePatientAsync(services, db, job.PatientId, ct);
         }
     }
 
     /// <summary>
     /// Patient-level analysis runs once, after every document has reached a terminal state (§9.2).
-    /// Until M3 lands this just settles the patient's status so the UI can leave the processing screen.
     /// </summary>
-    private async Task TryAdvancePatientAsync(MediTrailDbContext db, Guid patientId, CancellationToken ct)
+    private async Task TryAdvancePatientAsync(
+        IServiceProvider services, MediTrailDbContext db, Guid patientId, CancellationToken ct)
     {
         try
         {
@@ -189,27 +189,26 @@ public sealed class ProcessingWorker(
 
             if (pending > 0) return;
 
-            var patient = await db.Patients.FirstOrDefaultAsync(p => p.Id == patientId, ct);
-            if (patient is null) return;
+            // Guard against two documents finishing at once and both starting an analysis.
+            if (!_analysisInFlight.TryAdd(patientId, 0)) return;
 
-            var succeeded = await db.Documents.CountAsync(d => d.PatientId == patientId
-                && (d.Status == DocumentStatus.Extracted || d.Status == DocumentStatus.Cached), ct);
-
-            // No documents read successfully → an explanatory state, never a blank dashboard (§9.3).
-            patient.Status = succeeded > 0 ? PatientStatus.Ready : PatientStatus.Failed;
-            patient.StatusMessage = succeeded > 0
-                ? null
-                : "None of the uploaded documents could be read. Check the file quality and try again.";
-            patient.AnalyzedAt = DateTimeOffset.UtcNow;
-            patient.UpdatedAt = DateTimeOffset.UtcNow;
-
-            await db.SaveChangesAsync(ct);
+            try
+            {
+                var analyzer = services.GetRequiredService<IPatientAnalyzer>();
+                await analyzer.AnalyzeAsync(patientId, ct);
+            }
+            finally
+            {
+                _analysisInFlight.TryRemove(patientId, out _);
+            }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Could not advance patient {PatientId} status", patientId);
+            logger.LogError(ex, "Could not run analysis for patient {PatientId}", patientId);
         }
     }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, byte> _analysisInFlight = new();
 
     private static DateOnly? ParseIsoDate(string? value) =>
         DateOnly.TryParse(value, out var parsed) ? parsed : null;
