@@ -55,6 +55,10 @@ public sealed class ExtractionMerger(
         // hallucinate a year, and a wrong year silently reorders the whole timeline.
         document.DocumentDate = DateNormalizer.Parse(extraction.DocumentDate);
 
+        // Re-applied on merge as well as extraction, so re-processing stored output also drops
+        // a redacted-name fragment rather than carrying an old one forward.
+        document.ProviderName = PersonNameNormalizer.Clean(document.ProviderName);
+
         // Added through the DbSets rather than the parent's navigation collections. These entities
         // generate their own Guid keys, and EF infers state from the key when it discovers an
         // entity by fixup — a non-default key reads as "already exists", so it issues an UPDATE

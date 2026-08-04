@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MediTrail.Api.AiPipeline.Extraction;
+using MediTrail.Api.AiPipeline.Normalization;
 using MediTrail.Api.Configuration;
 using MediTrail.Api.Data;
 using MediTrail.Api.Data.Entities;
@@ -160,7 +161,8 @@ public sealed class ProcessingWorker(
 
                 var extraction = result.Extraction;
                 document.DocumentType = extraction?.DocumentType;
-                document.ProviderName = extraction?.Provider?.Name;
+                // Dropped when it is a fragment left beside a censor bar — see PersonNameNormalizer.
+                document.ProviderName = PersonNameNormalizer.Clean(extraction?.Provider?.Name);
                 document.ProviderFacility = extraction?.Provider?.Facility;
                 document.OverallConfidence = extraction?.OverallConfidence;
                 document.LegibilityNotes = extraction?.LegibilityNotes;

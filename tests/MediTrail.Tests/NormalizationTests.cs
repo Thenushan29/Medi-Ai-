@@ -174,6 +174,36 @@ public class DateNormalizerTests
         Assert.Null(DateNormalizer.Parse("31/02/2023"));
 }
 
+public class PersonNameNormalizerTests
+{
+    [Theory]
+    // Fragments left beside a censor bar. Presenting these as the prescriber invents a name
+    // out of a field the document deliberately hid.
+    [InlineData("Dr. Ak")]
+    [InlineData("Dr. C")]
+    [InlineData("Dr. O")]
+    [InlineData("Dr")]
+    [InlineData("Dr.")]
+    [InlineData("Dr. C█████")]
+    [InlineData("Dr. ████ Test")]
+    [InlineData("MBBS, MD")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void RejectsRedactedAndFragmentaryNames(string? printed) =>
+        Assert.Null(PersonNameNormalizer.Clean(printed));
+
+    [Theory]
+    [InlineData("Dr. Meera Iyer", "Dr. Meera Iyer")]
+    [InlineData("Dr Rakesh Kumar", "Dr Rakesh Kumar")]
+    [InlineData("John M. Brown, M.D.", "John M. Brown, M.D.")]
+    [InlineData("Ashraful Mollah", "Ashraful Mollah")]
+    [InlineData("கந்தசாமி ராமன்", "கந்தசாமி ராமன்")]
+    public void KeepsRealNamesExactlyAsPrinted(string printed, string expected) =>
+        // Returns the original string, not the stripped one — the title is part of how the
+        // document identifies them.
+        Assert.Equal(expected, PersonNameNormalizer.Clean(printed));
+}
+
 public class LabTestNormalizerTests
 {
     [Theory]
