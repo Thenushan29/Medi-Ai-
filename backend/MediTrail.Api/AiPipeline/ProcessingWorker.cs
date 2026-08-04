@@ -113,6 +113,15 @@ public sealed class ProcessingWorker(
 
         try
         {
+            // Re-check the hash cache here, not just at upload. Two identical files in one batch
+            // are both unextracted when they are accepted, so neither can match the other then —
+            // by the time the second reaches the worker, the first has usually finished.
+            if (await TryReuseExtractionAsync(db, document, ct))
+            {
+                await db.SaveChangesAsync(ct);
+                return;
+            }
+
             document.Status = DocumentStatus.Extracting;
             await db.SaveChangesAsync(ct);
 
@@ -217,6 +226,43 @@ public sealed class ProcessingWorker(
     }
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, byte> _analysisInFlight = new();
+
+    /// <summary>
+    /// Copies an existing extraction for the same file bytes, saving the vision call (FR-2.6).
+    /// Only the derived fields are copied — this document keeps its own id, path and upload metadata.
+    /// </summary>
+    private async Task<bool> TryReuseExtractionAsync(MediTrailDbContext db, Document document, CancellationToken ct)
+    {
+        if (!_options.EnableExtractionCache) return false;
+
+        var source = await db.Documents
+            .AsNoTracking()
+            .Where(d => d.Id != document.Id
+                     && d.Sha256 == document.Sha256
+                     && d.RawExtractionJson != null
+                     && (d.Status == DocumentStatus.Extracted || d.Status == DocumentStatus.Cached))
+            .OrderByDescending(d => d.ExtractedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (source is null) return false;
+
+        document.RawExtractionJson = JsonDocument.Parse(source.RawExtractionJson!.RootElement.GetRawText());
+        document.ExtractionModel = source.ExtractionModel;
+        document.DocumentType = source.DocumentType;
+        document.DocumentDate = source.DocumentDate;
+        document.ProviderName = source.ProviderName;
+        document.ProviderFacility = source.ProviderFacility;
+        document.OverallConfidence = source.OverallConfidence;
+        document.LegibilityNotes = source.LegibilityNotes;
+        document.Status = DocumentStatus.Cached;
+        document.ExtractedAt = DateTimeOffset.UtcNow;
+        document.FailureReason = null;
+
+        logger.LogInformation("Reused extraction for {DocumentId} from {SourceId} (identical bytes)",
+            document.Id, source.Id);
+
+        return true;
+    }
 
     private static DateOnly? ParseIsoDate(string? value) =>
         DateOnly.TryParse(value, out var parsed) ? parsed : null;

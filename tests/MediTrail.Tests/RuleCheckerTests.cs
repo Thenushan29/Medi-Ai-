@@ -150,6 +150,50 @@ public class RuleCheckerTests : IDisposable
         Assert.DoesNotContain(alerts, a => a.Type == AlertType.DuplicatePrescription);
     }
 
+    /// <summary>
+    /// traps.md Y2, the case that actually occurs: a person uploads a folder and the same scan is
+    /// in it twice. Two separate document rows, identical bytes — one prescribing event, so no
+    /// duplicate and no dosage conflict between them.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotReportDuplicateBetweenByteIdenticalUploads()
+    {
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        const string SharedHash = "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90";
+
+        AddDocument(first, new DateOnly(2007, 7, 7), sha256: SharedHash);
+        AddDocument(second, new DateOnly(2007, 7, 7), sha256: SharedHash);
+
+        AddMedication(first, generic: "atenolol", strength: 50, perDay: 1);
+        AddMedication(second, generic: "atenolol", strength: 50, perDay: 1);
+
+        await _db.SaveChangesAsync();
+
+        var alerts = await _checker.CheckAsync(_patientId);
+
+        Assert.DoesNotContain(alerts, a => a.Type == AlertType.DuplicatePrescription);
+        Assert.DoesNotContain(alerts, a => a.Type == AlertType.DosageConflict);
+    }
+
+    /// <summary>The suppression must be by content, not by date — different files still count.</summary>
+    [Fact]
+    public async Task StillReportsDuplicateBetweenDifferentFilesOnTheSameDay()
+    {
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+
+        AddDocument(first, new DateOnly(2007, 7, 7), sha256: new string('a', 64));
+        AddDocument(second, new DateOnly(2007, 7, 7), sha256: new string('b', 64));
+
+        AddMedication(first, generic: "atenolol", strength: 50, perDay: 1);
+        AddMedication(second, generic: "atenolol", strength: 50, perDay: 1);
+
+        await _db.SaveChangesAsync();
+
+        Assert.Contains(await _checker.CheckAsync(_patientId), a => a.Type == AlertType.DuplicatePrescription);
+    }
+
     [Fact]
     public async Task DetectsDosageConflictAcrossDocuments()
     {
@@ -215,7 +259,7 @@ public class RuleCheckerTests : IDisposable
 
     // ---- fixtures ----
 
-    private void AddDocument(Guid id, DateOnly date) =>
+    private void AddDocument(Guid id, DateOnly date, string? sha256 = null) =>
         _db.Documents.Add(new Document
         {
             Id = id,
@@ -223,7 +267,8 @@ public class RuleCheckerTests : IDisposable
             OriginalFileName = $"{id}.png",
             ContentType = "image/png",
             StoragePath = $"{_patientId}/{id}.png",
-            Sha256 = id.ToString("N") + id.ToString("N"),
+            // Distinct by default, so ordinary fixtures are treated as different files.
+            Sha256 = sha256 ?? id.ToString("N") + id.ToString("N"),
             DocumentDate = date,
             Status = DocumentStatus.Extracted
         });

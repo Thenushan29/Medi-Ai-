@@ -54,6 +54,16 @@ public sealed class DocumentService(
             try
             {
                 var (hash, bytes) = await HashAndReadAsync(file, ct);
+
+                // Extension and content type are both claims by the uploader. Checking the actual
+                // file signature catches a renamed file here, rather than after paying for a
+                // vision call that comes back with an unhelpful failure.
+                if (SignatureMismatch(bytes) is { } signatureProblem)
+                {
+                    rejected.Add(new RejectedFileDto { FileName = file.FileName, Reason = signatureProblem });
+                    continue;
+                }
+
                 var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
 
                 var document = new Document
@@ -316,6 +326,24 @@ public sealed class DocumentService(
             return $"Unsupported content type '{file.ContentType}'.";
 
         return null;
+    }
+
+    /// <summary>
+    /// Checks the file's actual signature. Returns null when the bytes look like a supported
+    /// format, or a readable reason when they do not.
+    /// </summary>
+    private static string? SignatureMismatch(byte[] bytes)
+    {
+        if (bytes.Length < 8) return "The file is too small to be a valid image or PDF.";
+
+        // PNG, JPEG (any variant), PDF.
+        var isPng = bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47;
+        var isJpeg = bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF;
+        var isPdf = bytes[0] == 0x25 && bytes[1] == 0x50 && bytes[2] == 0x44 && bytes[3] == 0x46;
+
+        return isPng || isJpeg || isPdf
+            ? null
+            : "This file is not a PNG, JPG or PDF, whatever its name says. Re-save it and try again.";
     }
 
     private static async Task<(string Hash, byte[] Bytes)> HashAndReadAsync(IFormFile file, CancellationToken ct)

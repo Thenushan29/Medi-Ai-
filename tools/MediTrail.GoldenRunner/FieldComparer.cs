@@ -54,10 +54,23 @@ public static class FieldComparer
     {
         var remaining = actual.ToList();
 
+        // Every printed word in the document, for deciding whether an unmatched extraction is
+        // genuinely invented or merely named differently from the label.
+        var documentText = string.Join(" ", expected.Select(m =>
+            $"{m.SourceText} {m.BrandName} {m.GenericName}"));
+
         foreach (var want in expected)
         {
             var key = want.GenericName ?? want.BrandName;
-            var got = remaining.FirstOrDefault(m => Matches(m.GenericName, key) || Matches(m.BrandName, key));
+
+            var got = remaining.FirstOrDefault(m => Matches(m.GenericName, key) || Matches(m.BrandName, key))
+                // "belladonna" vs "belladonna tincture" is the same drug named differently.
+                // Without this, one naming difference is penalised twice — once as a miss and
+                // again as a hallucination — which corrupts the metric that is supposed to mean
+                // "invented a drug that is not on the page".
+                ?? remaining.FirstOrDefault(m => NearlyMatches(m.GenericName, key)
+                                              || NearlyMatches(m.BrandName, key)
+                                              || NearlyMatches(m.GenericName, want.BrandName));
 
             if (got is null)
             {
@@ -77,11 +90,19 @@ public static class FieldComparer
             Add(results, "frequencies", $"{key}.durationDays", want.DurationDays?.ToString(), got.DurationDays?.ToString(), source);
         }
 
-        // Anything left over was never in the ground truth — a medication that does not exist.
+        // Anything left over matched no labelled medication. It is only a hallucination if the
+        // name appears nowhere in the document either — otherwise it is a splitting or naming
+        // difference, which is wrong but not invented.
         foreach (var extra in remaining)
         {
             var name = extra.GenericName ?? extra.BrandName ?? "(unnamed)";
-            results.Add(new FieldResult("medications", $"{name} (not in document)", null, name, Outcome.Hallucinated));
+            var grounded = IsGrounded(name, documentText) || IsGrounded(name, extra.SourceText);
+
+            results.Add(new FieldResult(
+                "medications",
+                grounded ? $"{name} (extra entry)" : $"{name} (not in document)",
+                null, name,
+                grounded ? Outcome.Wrong : Outcome.Hallucinated));
         }
     }
 
@@ -219,6 +240,27 @@ public static class FieldComparer
 
     private static bool Matches(string? a, string? b) =>
         !Blank(a) && !Blank(b) && Canonical(a!) == Canonical(b!);
+
+    /// <summary>
+    /// One name contains the other — "belladonna" / "belladonna tincture", "aspirin" /
+    /// "aspirin and codeine". Same drug, different level of detail. Used only to pair entries so
+    /// their fields can be compared; the fields themselves are still scored strictly.
+    /// </summary>
+    private static bool NearlyMatches(string? a, string? b)
+    {
+        if (Blank(a) || Blank(b)) return false;
+
+        var left = Canonical(a!);
+        var right = Canonical(b!);
+
+        if (left == right) return true;
+
+        // Require a substantial shared prefix, so "aspirin" does not pair with "asparaginase".
+        var shorter = left.Length <= right.Length ? left : right;
+        var longer = left.Length <= right.Length ? right : left;
+
+        return shorter.Length >= 5 && longer.Contains(shorter, StringComparison.Ordinal);
+    }
 
     /// <summary>Case, spacing and punctuation are not the model's job to get right.</summary>
     private static string Canonical(string value) =>

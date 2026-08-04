@@ -42,10 +42,18 @@ public sealed class DeterministicRuleChecker(
             .Where(l => l.PatientId == patientId && l.IsOutOfRange)
             .ToListAsync(ct);
 
+        // Two uploads of the same file are one visit filed twice, not two prescribing events.
+        // The evaluation dataset contains exactly this (traps.md Y2), and reporting it as
+        // double-dosing would be a false alarm about a filing artefact.
+        var hashByDocument = await db.Documents
+            .AsNoTracking()
+            .Where(d => d.PatientId == patientId)
+            .ToDictionaryAsync(d => d.Id, d => d.Sha256, ct);
+
         var alerts = new List<Alert>();
 
-        alerts.AddRange(FindDuplicates(patientId, medications));
-        alerts.AddRange(FindDosageConflicts(patientId, medications));
+        alerts.AddRange(FindDuplicates(patientId, medications, hashByDocument));
+        alerts.AddRange(FindDosageConflicts(patientId, medications, hashByDocument));
         alerts.AddRange(FindDuplicateTherapeuticClass(patientId, medications));
         alerts.AddRange(FindAllergyAndWarningConflicts(patientId, medications, allergies));
         alerts.AddRange(FindOutOfRangeLabs(patientId, labs));
@@ -64,7 +72,8 @@ public sealed class DeterministicRuleChecker(
     /// contains the same file twice (traps.md Y2), and reporting that as double-dosing would be a
     /// false alarm about a filing artefact.
     /// </summary>
-    private static IEnumerable<Alert> FindDuplicates(Guid patientId, List<Medication> medications)
+    private static IEnumerable<Alert> FindDuplicates(
+        Guid patientId, List<Medication> medications, Dictionary<Guid, string> hashByDocument)
     {
         foreach (var group in medications.GroupBy(m => m.GenericName!))
         {
@@ -77,7 +86,7 @@ public sealed class DeterministicRuleChecker(
                 {
                     var (a, b) = (items[i], items[j]);
 
-                    if (a.DocumentId == b.DocumentId) continue;
+                    if (IsSameVisit(a, b, hashByDocument)) continue;
                     if (!PeriodsOverlap(a, b)) continue;
 
                     yield return new Alert
@@ -107,7 +116,8 @@ public sealed class DeterministicRuleChecker(
     /// The same generic at conflicting strength or daily frequency (FR-5.2).
     /// Compared numerically, never by asking a model whether two strings differ.
     /// </summary>
-    private static IEnumerable<Alert> FindDosageConflicts(Guid patientId, List<Medication> medications)
+    private static IEnumerable<Alert> FindDosageConflicts(
+        Guid patientId, List<Medication> medications, Dictionary<Guid, string> hashByDocument)
     {
         foreach (var group in medications.GroupBy(m => m.GenericName!))
         {
@@ -119,7 +129,7 @@ public sealed class DeterministicRuleChecker(
                 for (var j = i + 1; j < items.Count; j++)
                 {
                     var (a, b) = (items[i], items[j]);
-                    if (a.DocumentId == b.DocumentId) continue;
+                    if (IsSameVisit(a, b, hashByDocument)) continue;
 
                     var strengthDiffers = a.StrengthValue is not null && b.StrengthValue is not null
                         && a.StrengthValue != b.StrengthValue
@@ -315,6 +325,20 @@ public sealed class DeterministicRuleChecker(
         var drugClass = DrugNameNormalizer.ClassOf(genericName);
         return drugClass is not null
             && string.Equals(drugClass, DrugNameNormalizer.Normalize(substance), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// True when two rows describe the same prescribing event: the same document, or two documents
+    /// that are byte-identical uploads of it. The second case matters because people upload a
+    /// folder and the same scan lands twice — a real occurrence in the evaluation dataset.
+    /// </summary>
+    private static bool IsSameVisit(Medication a, Medication b, Dictionary<Guid, string> hashByDocument)
+    {
+        if (a.DocumentId == b.DocumentId) return true;
+
+        return hashByDocument.TryGetValue(a.DocumentId, out var hashA)
+            && hashByDocument.TryGetValue(b.DocumentId, out var hashB)
+            && hashA == hashB;
     }
 
     /// <summary>
