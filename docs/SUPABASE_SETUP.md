@@ -144,6 +144,44 @@ A `201` with an `id` means the database write path works. Delete it afterwards w
 
 ---
 
+---
+
+## Keeping the project awake
+
+**A free-tier Supabase project is paused after 7 days without a request.** Submit today, and a judge
+opening the link next week finds every request failing. This is the most likely way the submission
+dies, and it dies quietly.
+
+`.github/workflows/keepalive.yml` pings the database every 6 hours. Enable it by pushing the
+repository to GitHub and adding two secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+|---|---|
+| `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `SUPABASE_SECRET_KEY` | the `sb_secret_...` key |
+| `BACKEND_URL` | the deployed API URL — add after M5; the job skips this step until then |
+
+It targets `/health/ready`, not `/health`. `/health` returns without touching Postgres or storage,
+so it would wake the web app and let the database pause anyway.
+
+Without GitHub, any external pinger works — UptimeRobot's free tier on a 5-minute interval against
+`/health/ready` does the same job.
+
+Before submitting, open the app once yourself. If the project has paused, the dashboard offers
+**Restore** and it returns in a couple of minutes — you want to discover that beforehand, not during
+judging.
+
+## Storage hardening
+
+The bucket carries a 10 MB file limit and accepts only `image/png`, `image/jpeg` and
+`application/pdf`. The application checks both already; enforcing them at the bucket too means a
+leaked service key cannot be used to fill the project with arbitrary files.
+
+The bucket remains **public** for Round 1 so the evidence viewer can load source images without a
+signing round trip (§16.3). Anyone holding a document URL can read it, so **do not upload real
+patient records.** The production path — private bucket with signed URLs and row-level security —
+is described in §17.2.
+
 ## Troubleshooting
 
 ### Everything above must come from the *same* project

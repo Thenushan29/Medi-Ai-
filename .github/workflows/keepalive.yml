@@ -1,0 +1,42 @@
+# A Supabase free-tier project is paused after 7 days without a request, and the free App Service
+# tier sleeps when idle. Either one turns a working submission into a dead link by the time a judge
+# opens it — the most likely way this project fails, and it fails silently.
+#
+# This keeps both awake. Enable it as soon as the repository is on GitHub; it works against Supabase
+# alone even before the backend is deployed.
+
+name: keepalive
+
+on:
+  schedule:
+    # Every 6 hours. Well inside the 7-day pause window, and often enough that
+    # a judge arriving unannounced finds a warm instance rather than a cold start.
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the database
+        # Any authenticated request counts as activity. This one reads nothing.
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/patients?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_SECRET_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SECRET_KEY }}")
+
+          echo "supabase: HTTP $status"
+          # 401 still proves the project is awake; only a timeout or 5xx means trouble.
+          if [ "$status" -ge 500 ] || [ "$status" = "000" ]; then exit 1; fi
+
+      - name: Wake the API and confirm it can reach its dependencies
+        # Skipped until the backend is deployed and BACKEND_URL is set.
+        if: ${{ secrets.BACKEND_URL != '' }}
+        run: |
+          body=$(curl -s --max-time 90 "${{ secrets.BACKEND_URL }}/health/ready")
+          echo "readiness: $body"
+
+          # /health alone would wake the app without touching Postgres or storage,
+          # which is exactly the case this job exists to prevent.
+          echo "$body" | grep -q '"status":"ready"'
