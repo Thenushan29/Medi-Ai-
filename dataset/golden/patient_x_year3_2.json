@@ -1,0 +1,74 @@
+{
+  "_comment": "traps.md X1 - WARFARIN and ASPIRIN AND CODEINE on one page: a major, well-documented bleeding interaction, and the strongest openFDA verification case in the dataset. Also CROCINE (paracetamol) alongside the aspirin/codeine combination. Dosing instructions are in Kannada. Durations are printed as a Kannada word plus a total count that does not always agree with it, so durationDays is null where it cannot be read with confidence - a guessed duration would create false overlap in the duplicate check.",
+
+  "documentType": "prescription",
+  "documentDate": "2019-08-05",
+
+  "provider": {
+    "name": "Dr. Test",
+    "facility": null
+  },
+
+  "patient": {
+    "age": "4 M",
+    "sex": "F"
+  },
+
+  "diagnoses": [
+    { "text": "Fever with chills", "sourceText": "* FEVER WITH CHILLS" }
+  ],
+
+  "medications": [
+    {
+      "brandName": "WARFARIN",
+      "genericName": "warfarin",
+      "strengthValue": null,
+      "strengthUnit": null,
+      "frequencyPerDay": 1,
+      "durationDays": null,
+      "sourceText": "1) CAP. WARFARIN"
+    },
+    {
+      "brandName": null,
+      "genericName": "amphetamine/dextroamphetamine",
+      "strengthValue": null,
+      "strengthUnit": null,
+      "frequencyPerDay": 3,
+      "durationDays": 1,
+      "sourceText": "2) TAB. AMPHETAMINE, DEXTROAMPHETAMINE MIXED SALTS"
+    },
+    {
+      "brandName": null,
+      "genericName": "ketotifen",
+      "strengthValue": null,
+      "strengthUnit": null,
+      "frequencyPerDay": 2,
+      "durationDays": 5,
+      "sourceText": "3) TAB. KETOTIFEN"
+    },
+    {
+      "brandName": "CROCINE",
+      "genericName": "paracetamol",
+      "strengthValue": null,
+      "strengthUnit": null,
+      "frequencyPerDay": 2,
+      "durationDays": 2,
+      "sourceText": "4) TAB. CROCINE"
+    },
+    {
+      "brandName": null,
+      "genericName": "aspirin/codeine",
+      "strengthValue": null,
+      "strengthUnit": null,
+      "frequencyPerDay": 1,
+      "durationDays": 5,
+      "sourceText": "5) CAP. ASPIRIN AND CODEINE"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": [],
+
+  "followUpDate": "2019-08-13"
+}

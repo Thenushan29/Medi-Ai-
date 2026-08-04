@@ -1,0 +1,59 @@
+{
+  "_comment": "traps.md X5/X6 - placeholders with dosing instructions in Malayalam. '1 രാവിലെ, 1 രാത്രി' is 1 morning, 1 night. The printed date carries a time ('03-Oct-2019, 12:04 PM') which must be stripped before parsing rather than causing the date to fail.",
+
+  "documentType": "prescription",
+  "documentDate": "2019-10-03",
+
+  "provider": {
+    "name": null,
+    "facility": null
+  },
+
+  "patient": {
+    "age": "8 Y",
+    "sex": "M"
+  },
+
+  "diagnoses": [
+    { "text": "Fever", "sourceText": "* FEVER" }
+  ],
+
+  "medications": [
+    {
+      "brandName": "DEMO MEDICINE 1",
+      "genericName": null,
+      "frequency": "1 രാവിലെ, 1 രാത്രി",
+      "frequencyPerDay": 2,
+      "durationDays": 10,
+      "sourceText": "1) TAB. DEMO MEDICINE 1  1 രാവിലെ, 1 രാത്രി (ഭക്ഷണത്തിന് മുൻപ്)  10 ദിവസം (മൊത്തം:20 ഗുളിക)"
+    },
+    {
+      "brandName": "DEMO MEDICINE 2",
+      "genericName": null,
+      "frequency": "1 രാവിലെ, 1 രാത്രി",
+      "frequencyPerDay": 2,
+      "durationDays": 10,
+      "sourceText": "2) CAP. DEMO MEDICINE 2  1 രാവിലെ, 1 രാത്രി (ഭക്ഷണത്തിന് മുൻപ്)  10 ദിവസം (മൊത്തം:20 കാപ്സ്യൂൾ)"
+    },
+    {
+      "brandName": "DEMO MEDICINE 3",
+      "genericName": null,
+      "frequencyPerDay": 4,
+      "durationDays": 10,
+      "sourceText": "3) TAB. DEMO MEDICINE 3  1 രാവിലെ, 1 ഉച്ചതിരിഞ്ഞ്, 1 വൈകുന്നേരം, 1 രാത്രി (ഭക്ഷണത്തിന് ശേഷം)  10 ദിവസം (മൊത്തം:40 ഗുളിക)"
+    },
+    {
+      "brandName": "DEMO MEDICINE 4",
+      "genericName": null,
+      "frequencyPerDay": 1,
+      "durationDays": 10,
+      "sourceText": "4) TAB. DEMO MEDICINE 4  1/2 രാവിലെ, 1/2 രാത്രി (ഭക്ഷണത്തിന് ശേഷം)  10 ദിവസം (മൊത്തം:10 ഗുളിക)"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": [],
+
+  "followUpDate": "2019-10-18"
+}

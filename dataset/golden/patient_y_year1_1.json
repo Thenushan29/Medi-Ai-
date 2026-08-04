@@ -1,0 +1,35 @@
+{
+  "_comment": "traps.md Y9 - a fully handwritten UK NHS private prescription, and the hardest legibility case in the dataset. The strength is written out twice ('36mg' and 'THIRTY SIX MILLIGRAMS'), which is a dispensing safety convention. Concerta XL is methylphenidate; the generic is not printed, but the brand is unambiguous. Date is written 07/10/2022 on a UK form, where the convention is day-first - but nothing on the page establishes that, and both parts are under 12, so the label is null per 11.3.",
+
+  "documentType": "prescription",
+  "documentDate": null,
+
+  "provider": {
+    "name": "Doctor R Islam",
+    "facility": "Skylight Psychiatry",
+    "specialty": "Psychiatry"
+  },
+
+  "patient": {},
+
+  "diagnoses": [],
+
+  "medications": [
+    {
+      "brandName": "Concerta XL",
+      "genericName": "methylphenidate",
+      "strengthValue": 36,
+      "strengthUnit": "mg",
+      "dose": "One tablet",
+      "frequency": "Once a day in the morning",
+      "frequencyPerDay": 1,
+      "durationDays": 24,
+      "instructions": "Take one tablet once a day in the morning for 24 days. Total of 24 tablets.",
+      "sourceText": "CONCERTA XL MODIFIED RELEASE TABLETS 36mg (THIRTY SIX MILLIGRAMS) TAKE ONE TABLET ONCE A DAY IN THE MORNING. FOR 24 (TWENTY FOUR) DAYS. TOTAL OF 24 (TWENTY FOUR) TABLETS"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": []
+}

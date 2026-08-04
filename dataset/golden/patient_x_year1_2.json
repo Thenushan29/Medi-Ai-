@@ -1,0 +1,62 @@
+{
+  "_comment": "traps.md X6 - a clinic-software sample whose medicines are literally named 'DEMO MEDICINE 1..4'. These are placeholders, not drugs, so genericName must be null on every row. Giving one an invented generic would put a fictional medication in a patient's record, which is the hallucination target of 3.3. The charts on this page are illustrations of temperature and blood pressure over time, not lab results with reference ranges, so labResults is empty.",
+
+  "documentType": "prescription",
+  "documentDate": "2020-04-27",
+
+  "provider": {
+    "name": null,
+    "facility": null
+  },
+
+  "patient": {
+    "sex": "M"
+  },
+
+  "diagnoses": [],
+
+  "medications": [
+    {
+      "brandName": "DEMO MEDICINE 1",
+      "genericName": null,
+      "frequency": "1 Morning, 1 Night",
+      "frequencyPerDay": 2,
+      "durationDays": 10,
+      "instructions": "Before Food",
+      "sourceText": "1) TAB. DEMO MEDICINE 1  1 Morning, 1 Night (Before Food)  10 Days (Tot:20 Tab)"
+    },
+    {
+      "brandName": "DEMO MEDICINE 2",
+      "genericName": null,
+      "frequency": "1 Morning, 1 Night",
+      "frequencyPerDay": 2,
+      "durationDays": 10,
+      "instructions": "Before Food",
+      "sourceText": "2) CAP. DEMO MEDICINE 2  1 Morning, 1 Night (Before Food)  10 Days (Tot:20 Cap)"
+    },
+    {
+      "brandName": "DEMO MEDICINE 3",
+      "genericName": null,
+      "frequency": "1 Morning, 1 Aft, 1 Eve, 1 Night",
+      "frequencyPerDay": 4,
+      "durationDays": 10,
+      "instructions": "After Food",
+      "sourceText": "3) TAB. DEMO MEDICINE 3  1 Morning, 1 Aft, 1 Eve, 1 Night (After Food)  10 Days (Tot:40 Tab)"
+    },
+    {
+      "brandName": "DEMO MEDICINE 4",
+      "genericName": null,
+      "frequency": "1/2 Morning, 1/2 Night",
+      "frequencyPerDay": 1,
+      "durationDays": 10,
+      "instructions": "After Food",
+      "sourceText": "4) TAB. DEMO MEDICINE 4  1/2 Morning, 1/2 Night (After Food)  10 Days (Tot:10 Tab)"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": [],
+
+  "followUpDate": "2020-05-12"
+}

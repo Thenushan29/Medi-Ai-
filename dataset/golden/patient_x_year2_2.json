@@ -1,0 +1,47 @@
+{
+  "_comment": "traps.md X6. 'Known History Of: ABC, PQR' and 'Procedures conducted: DEMO PROCEDURE' are placeholders too - none of them is a diagnosis or an allergy. Only the stated diagnosis (Fever) is recorded. X-RAY and P-53 are ordered investigations, not results, so labResults is empty.",
+
+  "documentType": "prescription",
+  "documentDate": "2020-01-02",
+
+  "provider": {
+    "name": null,
+    "facility": null
+  },
+
+  "patient": {
+    "age": "9 Y",
+    "sex": "M"
+  },
+
+  "diagnoses": [
+    { "text": "Fever", "sourceText": "* FEVER" }
+  ],
+
+  "medications": [
+    {
+      "brandName": "DEMO MEDICINE 1",
+      "genericName": null,
+      "frequency": "1 Morning, 1 Night",
+      "frequencyPerDay": 2,
+      "durationDays": 8,
+      "instructions": "Before Food",
+      "sourceText": "1) TAB. DEMO MEDICINE 1  1 Morning, 1 Night (Before Food)  8 Days (Tot:20 Tab)"
+    },
+    {
+      "brandName": "DEMO MEDICINE 2",
+      "genericName": null,
+      "frequency": "1 Morning, 1 Night",
+      "frequencyPerDay": 2,
+      "durationDays": 8,
+      "instructions": "Before Food",
+      "sourceText": "2) CAP. DEMO MEDICINE 2  1 Morning, 1 Night (Before Food)  8 Days (Tot:20 Cap)"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": [],
+
+  "followUpDate": "2020-01-17"
+}

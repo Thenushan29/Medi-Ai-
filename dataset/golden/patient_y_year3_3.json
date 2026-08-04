@@ -1,0 +1,78 @@
+﻿{
+  "_comment": "Byte-identical copy of patient_y_year3_2.jpg (traps.md Y2). The label is deliberately identical: the second upload must reuse the cached extraction and must NOT be reported as a duplicate prescription, since it is the same visit filed twice.",
+
+  "documentType": "prescription",
+  "documentDate": "2007-07-07",
+
+  "provider": {
+    "name": "Dr. Ankur Sharma",
+    "facility": null
+  },
+
+  "patient": {
+    "name": "Amit Sharma",
+    "age": "55",
+    "sex": "Male"
+  },
+
+  "diagnoses": [],
+
+  "medications": [
+    {
+      "brandName": null,
+      "genericName": "isosorbide dinitrate",
+      "strengthValue": 5,
+      "strengthUnit": "mg",
+      "frequency": "sublingually as and when required",
+      "frequencyPerDay": null,
+      "route": "sublingual",
+      "sourceText": "Tab. Isosorbide dinitrate 5 mg sublingually as and when required"
+    },
+    {
+      "brandName": null,
+      "genericName": "isosorbide mononitrate",
+      "strengthValue": 50,
+      "strengthUnit": "mg",
+      "frequency": "1 od",
+      "frequencyPerDay": 1,
+      "durationDays": 15,
+      "sourceText": "Tab. Isosorbide mononitrate 50 mgSR 1od Ã— 15 days"
+    },
+    {
+      "brandName": null,
+      "genericName": "atenolol",
+      "strengthValue": 50,
+      "strengthUnit": "mg",
+      "frequency": "1 od",
+      "frequencyPerDay": 1,
+      "durationDays": 15,
+      "sourceText": "Tab. Atenolol 50 mg  1 od Ã— 15 days"
+    },
+    {
+      "brandName": null,
+      "genericName": "aspirin",
+      "strengthValue": 100,
+      "strengthUnit": "mg",
+      "frequency": "1 od",
+      "frequencyPerDay": 1,
+      "durationDays": 15,
+      "sourceText": "Tab. Aspirin 100 mg  1 od Ã— 15 days"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+
+  "warningsInDocument": [
+    {
+      "text": "Atenolol contraindicated in asthmatics",
+      "relatesTo": ["atenolol"],
+      "sourceText": "Atenolol contraindicated in asthmatics"
+    },
+    {
+      "text": "Do not take aspirin empty stomach",
+      "relatesTo": ["aspirin"],
+      "sourceText": "Do not take aspirin empty stomach"
+    }
+  ]
+}

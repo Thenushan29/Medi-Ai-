@@ -1,0 +1,65 @@
+{
+  "_comment": "traps.md X5/X6 - placeholder medicines with dosing instructions in Hindi. '1 सुबह, 1 रात' is 1 morning, 1 night; '1 सुबह, 1 दोपहर, 1 शाम, 1 रात' is four times a day. frequencyPerDay must still resolve, and sourceText keeps the Devanagari exactly as printed. Advice ('उबला हुआ पानी पिएं' - drink boiled water) names no substance, so it is not a document warning.",
+
+  "documentType": "prescription",
+  "documentDate": "2019-07-04",
+
+  "provider": {
+    "name": null,
+    "facility": null
+  },
+
+  "patient": {
+    "age": "8 Y",
+    "sex": "M"
+  },
+
+  "diagnoses": [
+    { "text": "Fever", "sourceText": "* FEVER" }
+  ],
+
+  "medications": [
+    {
+      "brandName": "DEMO MEDICINE 1",
+      "genericName": null,
+      "frequency": "1 सुबह, 1 रात",
+      "frequencyPerDay": 2,
+      "durationDays": 10,
+      "instructions": "खाने से पहले",
+      "sourceText": "1) TAB. DEMO MEDICINE 1  1 सुबह, 1 रात (खाने से पहले)  10 दिन (कुल:20 गोलियाँ)"
+    },
+    {
+      "brandName": "DEMO MEDICINE 2",
+      "genericName": null,
+      "frequency": "1 सुबह, 1 रात",
+      "frequencyPerDay": 2,
+      "durationDays": 10,
+      "instructions": "खाने से पहले",
+      "sourceText": "2) CAP. DEMO MEDICINE 2  1 सुबह, 1 रात (खाने से पहले)  10 दिन (कुल:20 कैप्सूल)"
+    },
+    {
+      "brandName": "DEMO MEDICINE 3",
+      "genericName": null,
+      "frequency": "1 सुबह, 1 दोपहर, 1 शाम, 1 रात",
+      "frequencyPerDay": 4,
+      "durationDays": 10,
+      "instructions": "खाने के बाद",
+      "sourceText": "3) TAB. DEMO MEDICINE 3  1 सुबह, 1 दोपहर, 1 शाम, 1 रात (खाने के बाद)  10 दिन (कुल:40 गोलियाँ)"
+    },
+    {
+      "brandName": "DEMO MEDICINE 4",
+      "genericName": null,
+      "frequency": "1/2 सुबह, 1/2 रात",
+      "frequencyPerDay": 1,
+      "durationDays": 10,
+      "instructions": "खाने के बाद",
+      "sourceText": "4) TAB. DEMO MEDICINE 4  1/2 सुबह, 1/2 रात (खाने के बाद)  10 दिन (कुल:10 गोलियाँ)"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": [],
+
+  "followUpDate": "2019-07-15"
+}

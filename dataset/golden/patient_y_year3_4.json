@@ -1,0 +1,45 @@
+{
+  "_comment": "Same patient and date as year3_2 but a different prescription, so this is a genuinely separate document rather than a duplicate. The 'Additional measures' lines are conditional clinical guidance, not cautions about a named substance - 'if pain due to soft tissue trauma give NSAIDs' names a class as a suggestion, not a warning against it, so warningsInDocument is empty.",
+
+  "documentType": "prescription",
+  "documentDate": "2007-07-07",
+
+  "provider": {
+    "name": "Dr. Ankur Sharma",
+    "facility": null
+  },
+
+  "patient": {
+    "name": "Amit Sharma",
+    "age": "55",
+    "sex": "Male"
+  },
+
+  "diagnoses": [],
+
+  "medications": [
+    {
+      "brandName": null,
+      "genericName": "dicyclomine",
+      "strengthValue": 10,
+      "strengthUnit": "mg",
+      "frequency": "stat",
+      "frequencyPerDay": null,
+      "route": "IM",
+      "sourceText": "Inj. Dicyclomine HCl 10 mg IM stat"
+    },
+    {
+      "brandName": null,
+      "genericName": "dicyclomine",
+      "strengthValue": 10,
+      "strengthUnit": "mg",
+      "frequency": "1 sos",
+      "frequencyPerDay": null,
+      "sourceText": "Tab. Dicyclomine HCl 10 mg  1 sos"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": []
+}

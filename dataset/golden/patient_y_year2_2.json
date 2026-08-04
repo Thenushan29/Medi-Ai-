@@ -1,0 +1,48 @@
+{
+  "_comment": "US Navy DD Form 1289, handwritten, dated 23 Jan 99. A compounded preparation written in classic apothecary form: two ingredients combined into one solution rather than two separate medications. 'Tr. Belladonna' is tincture of belladonna; 'Amphogel' is aluminium hydroxide gel; 'qsad 120 ml' means make up to 120 ml. 'Sig: 5ml t.i.d. a.c.' is 5 ml three times daily before meals. The two-digit year 99 is unambiguous in context (the form is dated 1 NOV 71 and the exp date is 12/02), so 1999 is recorded.",
+
+  "documentType": "prescription",
+  "documentDate": "1999-01-23",
+
+  "provider": {
+    "name": "Jack R Frost",
+    "facility": "U.S.S. Neverforgotten (DD 178)"
+  },
+
+  "patient": {
+    "name": "John R. Doe"
+  },
+
+  "diagnoses": [],
+
+  "medications": [
+    {
+      "brandName": null,
+      "genericName": "belladonna",
+      "strengthValue": 15,
+      "strengthUnit": "ml",
+      "dose": "5 ml",
+      "frequency": "t.i.d. a.c.",
+      "frequencyPerDay": 3,
+      "route": "oral",
+      "instructions": "5 ml three times daily before meals",
+      "sourceText": "Tr. Belladonna  15 ml"
+    },
+    {
+      "brandName": "Amphogel",
+      "genericName": "aluminium hydroxide",
+      "strengthValue": 120,
+      "strengthUnit": "ml",
+      "dose": "5 ml",
+      "frequency": "t.i.d. a.c.",
+      "frequencyPerDay": 3,
+      "route": "oral",
+      "instructions": "5 ml three times daily before meals",
+      "sourceText": "Amphogel qsad  120 ml"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": []
+}

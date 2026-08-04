@@ -1,0 +1,49 @@
+{
+  "_comment": "traps.md Y14/Y15. Instructions for the second medicine are in Gujarati. 'Cratine' and 'CBC Count' are SUGGESTED investigations with no values, so labResults is empty - a suggested test is not a result. Dosage is written 1-1-1 and 1-0-1, which normalize to 3 and 2 doses per day. 'CAP SM FIBRO' is a regional brand with no ingredient line printed; the generic is null rather than guessed.",
+
+  "documentType": "prescription",
+  "documentDate": "2019-05-01",
+
+  "provider": {
+    "name": "Mr. Anil Kumar Sharma",
+    "facility": "Quest Care Medical Clinic"
+  },
+
+  "patient": {
+    "name": "Aakruti Kapoor",
+    "age": "31 years",
+    "sex": "Female"
+  },
+
+  "diagnoses": [
+    { "text": "Dengue", "sourceText": "Diagnosis: Dengue" }
+  ],
+
+  "medications": [
+    {
+      "brandName": "Rantac",
+      "genericName": "ranitidine",
+      "strengthValue": 150,
+      "strengthUnit": "mg",
+      "frequency": "1-1-1",
+      "frequencyPerDay": 3,
+      "durationDays": 3,
+      "instructions": "After Meal",
+      "sourceText": "Tab Rantac 150mg  1-1-1  3 days  After Meal"
+    },
+    {
+      "brandName": "SM FIBRO",
+      "genericName": null,
+      "strengthValue": null,
+      "strengthUnit": null,
+      "frequency": "1-0-1",
+      "frequencyPerDay": 2,
+      "durationDays": 5,
+      "sourceText": "CAP SM FIBRO  1-0-1  5 days  ભૂખ્યા પેટે"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": []
+}

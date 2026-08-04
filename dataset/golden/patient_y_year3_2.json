@@ -1,0 +1,78 @@
+{
+  "_comment": "Cardiac prescription. traps.md Y5/Y6 - two contraindications are printed under 'Other measures' and must be captured as document warnings with the generics they name, since that is what the contradiction check matches medications against. patient_y_year3_3 is a byte-identical copy of this file; its label is identical by design (traps.md Y2).",
+
+  "documentType": "prescription",
+  "documentDate": "2007-07-07",
+
+  "provider": {
+    "name": "Dr. Ankur Sharma",
+    "facility": null
+  },
+
+  "patient": {
+    "name": "Amit Sharma",
+    "age": "55",
+    "sex": "Male"
+  },
+
+  "diagnoses": [],
+
+  "medications": [
+    {
+      "brandName": null,
+      "genericName": "isosorbide dinitrate",
+      "strengthValue": 5,
+      "strengthUnit": "mg",
+      "frequency": "sublingually as and when required",
+      "frequencyPerDay": null,
+      "route": "sublingual",
+      "sourceText": "Tab. Isosorbide dinitrate 5 mg sublingually as and when required"
+    },
+    {
+      "brandName": null,
+      "genericName": "isosorbide mononitrate",
+      "strengthValue": 50,
+      "strengthUnit": "mg",
+      "frequency": "1 od",
+      "frequencyPerDay": 1,
+      "durationDays": 15,
+      "sourceText": "Tab. Isosorbide mononitrate 50 mgSR 1od × 15 days"
+    },
+    {
+      "brandName": null,
+      "genericName": "atenolol",
+      "strengthValue": 50,
+      "strengthUnit": "mg",
+      "frequency": "1 od",
+      "frequencyPerDay": 1,
+      "durationDays": 15,
+      "sourceText": "Tab. Atenolol 50 mg  1 od × 15 days"
+    },
+    {
+      "brandName": null,
+      "genericName": "aspirin",
+      "strengthValue": 100,
+      "strengthUnit": "mg",
+      "frequency": "1 od",
+      "frequencyPerDay": 1,
+      "durationDays": 15,
+      "sourceText": "Tab. Aspirin 100 mg  1 od × 15 days"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+
+  "warningsInDocument": [
+    {
+      "text": "Atenolol contraindicated in asthmatics",
+      "relatesTo": ["atenolol"],
+      "sourceText": "Atenolol contraindicated in asthmatics"
+    },
+    {
+      "text": "Do not take aspirin empty stomach",
+      "relatesTo": ["aspirin"],
+      "sourceText": "Do not take aspirin empty stomach"
+    }
+  ]
+}

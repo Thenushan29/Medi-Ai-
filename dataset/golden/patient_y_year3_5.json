@@ -1,0 +1,35 @@
+{
+  "_comment": "traps.md Y10 - the date reads 'Jan 9, 20yy'. That is a template placeholder, not a year, so documentDate is null. Inventing a plausible year here would silently reorder the whole timeline, which is exactly the failure FR-4.1 exists to prevent. 'Tabs No. 30' is a dispensed quantity, not a duration; at one tablet daily that implies 30 days, but the document does not say so and the label does not infer it.",
+
+  "documentType": "prescription",
+  "documentDate": null,
+
+  "provider": {
+    "name": "John M. Brown, M.D.",
+    "facility": null
+  },
+
+  "patient": {
+    "name": "Mary Smith"
+  },
+
+  "diagnoses": [],
+
+  "medications": [
+    {
+      "brandName": "Lipitor",
+      "genericName": "atorvastatin",
+      "strengthValue": 10,
+      "strengthUnit": "mg",
+      "frequency": "i every day",
+      "frequencyPerDay": 1,
+      "durationDays": null,
+      "instructions": "Sig: tab i every day",
+      "sourceText": "Lipitor 10 mg  Tabs No. 30  Sig: tab i every day"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": []
+}

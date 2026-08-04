@@ -1,0 +1,65 @@
+{
+  "_comment": "traps.md Y4/Y8/Y11/Y12. Betaloc (metoprolol) and Oxprelol (oxprenolol) are two beta-blockers on one page; cimetidine raises beta-blocker levels. 'Oxprelol' is a misspelling of oxprenolol - resolved here because the intent is unambiguous at this strength and form. Date '09-11-12' has a two-digit year AND day/month ambiguity, so it is null (traps.md Y11).",
+
+  "documentType": "prescription",
+  "documentDate": null,
+
+  "provider": {
+    "name": "Dr. Steve Johnson",
+    "facility": "Medical Centre"
+  },
+
+  "patient": {
+    "name": "John Smith",
+    "age": "34"
+  },
+
+  "diagnoses": [],
+
+  "medications": [
+    {
+      "brandName": "Betaloc",
+      "genericName": "metoprolol",
+      "strengthValue": 100,
+      "strengthUnit": "mg",
+      "frequency": "BID",
+      "frequencyPerDay": 2,
+      "dose": "1 tab",
+      "sourceText": "Betaloc 100mg - 1 tab BID"
+    },
+    {
+      "brandName": null,
+      "genericName": "dorzolamide",
+      "strengthValue": 10,
+      "strengthUnit": "mg",
+      "frequency": "BID",
+      "frequencyPerDay": 2,
+      "dose": "1 tab",
+      "sourceText": "Dorzolamide 10 mg - 1 tab BID"
+    },
+    {
+      "brandName": null,
+      "genericName": "cimetidine",
+      "strengthValue": 50,
+      "strengthUnit": "mg",
+      "frequency": "TID",
+      "frequencyPerDay": 3,
+      "dose": "2 tabs",
+      "sourceText": "Cimetidine 50 mg - 2 tabs TID"
+    },
+    {
+      "brandName": "Oxprelol",
+      "genericName": "oxprenolol",
+      "strengthValue": 50,
+      "strengthUnit": "mg",
+      "frequency": "QD",
+      "frequencyPerDay": 1,
+      "dose": "1 tab",
+      "sourceText": "Oxprelol 50mg - 1 tab QD"
+    }
+  ],
+
+  "labResults": [],
+  "allergies": [],
+  "warningsInDocument": []
+}
