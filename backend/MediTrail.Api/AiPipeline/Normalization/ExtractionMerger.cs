@@ -80,7 +80,11 @@ public sealed class ExtractionMerger(
 
         foreach (var source in extraction.Medications)
         {
-            var generic = DrugNameNormalizer.Normalize(source.GenericName);
+            // The model resolves the generic where it can. When it could not, fall back to the
+            // brand table: a row with no generic is excluded from every cross-check, so an
+            // unresolved brand silently removes a medication from the safety analysis.
+            var generic = DrugNameNormalizer.Normalize(source.GenericName)
+                ?? DrugNameNormalizer.GenericForBrand(source.BrandName);
 
             // A brand with no resolved generic still deserves a row — the user must see everything
             // that was on the page (US-2). It simply cannot participate in generic-keyed checks.

@@ -1,11 +1,12 @@
-﻿{
+{
   "_comment": "Byte-identical copy of patient_y_year3_2.jpg (traps.md Y2). The label is deliberately identical: the second upload must reuse the cached extraction and must NOT be reported as a duplicate prescription, since it is the same visit filed twice.",
 
   "documentType": "prescription",
   "documentDate": "2007-07-07",
 
   "provider": {
-    "name": "Dr. Ankur Sharma",
+    "_note": "The page names two doctors - Dr Rakesh Kumar on the letterhead and Dr Ankur Sharma at the signature. Both are defensible readings of 'provider'; the letterhead is recorded because that is the conventional prescription header.",
+    "name": "Dr Rakesh Kumar",
     "facility": null
   },
 
@@ -36,7 +37,7 @@
       "frequency": "1 od",
       "frequencyPerDay": 1,
       "durationDays": 15,
-      "sourceText": "Tab. Isosorbide mononitrate 50 mgSR 1od Ã— 15 days"
+      "sourceText": "Tab. Isosorbide mononitrate 50 mgSR 1od × 15 days"
     },
     {
       "brandName": null,
@@ -46,7 +47,7 @@
       "frequency": "1 od",
       "frequencyPerDay": 1,
       "durationDays": 15,
-      "sourceText": "Tab. Atenolol 50 mg  1 od Ã— 15 days"
+      "sourceText": "Tab. Atenolol 50 mg  1 od × 15 days"
     },
     {
       "brandName": null,
@@ -56,7 +57,7 @@
       "frequency": "1 od",
       "frequencyPerDay": 1,
       "durationDays": 15,
-      "sourceText": "Tab. Aspirin 100 mg  1 od Ã— 15 days"
+      "sourceText": "Tab. Aspirin 100 mg  1 od × 15 days"
     }
   ],
 

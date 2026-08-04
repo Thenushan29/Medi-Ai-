@@ -55,6 +55,60 @@ public static partial class DrugNameNormalizer
     };
 
     /// <summary>
+    /// Widely-recognised brands, used **only** as a fallback when the model could not resolve the
+    /// generic itself. Without it a brand-only row carries no generic, is excluded from every
+    /// cross-check, and a real interaction goes unreported — measured on the evaluation set, two
+    /// beta-blockers were being missed for exactly this reason.
+    ///
+    /// Deliberately small and international, not a scrape: brand naming is regional and
+    /// open-ended, so the model remains the primary route and a terminology service is the
+    /// production path (§26). A wrong entry here would be worse than an absent one.
+    /// </summary>
+    private static readonly Dictionary<string, string> Brands = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["betaloc"] = "metoprolol",
+        ["lopressor"] = "metoprolol",
+        ["trasicor"] = "oxprenolol",
+        ["tenormin"] = "atenolol",
+        ["inderal"] = "propranolol",
+        ["concor"] = "bisoprolol",
+
+        ["crocin"] = "paracetamol",
+        ["crocine"] = "paracetamol",
+        ["panadol"] = "paracetamol",
+        ["calpol"] = "paracetamol",
+        ["tylenol"] = "paracetamol",
+        ["dolo"] = "paracetamol",
+
+        ["disprin"] = "aspirin",
+        ["ecosprin"] = "aspirin",
+        ["brufen"] = "ibuprofen",
+        ["combiflam"] = "ibuprofen/paracetamol",
+        ["voveran"] = "diclofenac",
+
+        ["rantac"] = "ranitidine",
+        ["zinetac"] = "ranitidine",
+        ["pantocid"] = "pantoprazole",
+        ["pan"] = "pantoprazole",
+        ["omez"] = "omeprazole",
+
+        ["lipitor"] = "atorvastatin",
+        ["atorlip"] = "atorvastatin",
+        ["concerta"] = "methylphenidate",
+        ["ritalin"] = "methylphenidate",
+        ["augmentin"] = "amoxicillin/clavulanic acid",
+        ["zoclar"] = "clarithromycin",
+        ["amoxil"] = "amoxicillin",
+        ["udiliv"] = "ursodeoxycholic acid",
+        ["ursocol"] = "ursodeoxycholic acid",
+        ["silybon"] = "silymarin",
+        ["becosules"] = "vitamin b complex",
+        ["amphogel"] = "aluminium hydroxide",
+        ["glycomet"] = "metformin",
+        ["eltroxin"] = "levothyroxine"
+    };
+
+    /// <summary>
     /// Therapeutic classes, for duplicate-therapy detection. Prescribing two members of one class
     /// is a real finding even though the generics differ — the dataset carries three beta-blockers.
     /// </summary>
@@ -131,6 +185,24 @@ public static partial class DrugNameNormalizer
         if (cleaned.Length == 0) return null;
 
         return Synonyms.TryGetValue(cleaned, out var canonical) ? canonical : cleaned;
+    }
+
+    /// <summary>
+    /// Resolves a brand to its generic. Returns null for an unrecognised brand — that is the
+    /// honest answer, and the row is still stored and shown, it simply cannot join the
+    /// generic-keyed cross-checks.
+    /// </summary>
+    public static string? GenericForBrand(string? brandName)
+    {
+        if (string.IsNullOrWhiteSpace(brandName)) return null;
+
+        var cleaned = FormPrefix().Replace(brandName.Trim(), string.Empty);
+        cleaned = TrailingStrength().Replace(cleaned, string.Empty);
+        cleaned = Whitespace().Replace(cleaned, " ").Trim().ToLowerInvariant();
+
+        if (cleaned.Length == 0 || IsPlaceholder(cleaned)) return null;
+
+        return Brands.TryGetValue(cleaned, out var generic) ? generic : null;
     }
 
     /// <summary>Therapeutic class, or null when the drug is not in the table.</summary>

@@ -5,6 +5,26 @@ namespace MediTrail.Tests;
 public class DrugNameNormalizerTests
 {
     [Theory]
+    [InlineData("Betaloc", "metoprolol")]
+    [InlineData("Oxprelol", null)]          // misspelt brand — not in the table, honestly null
+    [InlineData("Crocin", "paracetamol")]
+    [InlineData("TAB. CROCINE", "paracetamol")]
+    [InlineData("Lipitor 10mg", "atorvastatin")]
+    [InlineData("Rantac", "ranitidine")]
+    [InlineData("DEMO MEDICINE 1", null)]
+    [InlineData("Zzyxbrand", null)]
+    public void ResolvesKnownBrandsAndAdmitsUnknownOnes(string brand, string? expected) =>
+        // Fallback for when the model could not resolve the generic itself. A row with no generic
+        // is excluded from every cross-check, so this gap costs findings, not just accuracy.
+        Assert.Equal(expected, DrugNameNormalizer.GenericForBrand(brand));
+
+    [Fact]
+    public void BrandFallbackFeedsTherapeuticClassDetection() =>
+        // The point of the fallback: Betaloc must reach the beta-blocker class, so that
+        // prescribing it alongside atenolol is detected as duplicate therapy.
+        Assert.Equal("beta blocker", DrugNameNormalizer.ClassOf(DrugNameNormalizer.GenericForBrand("Betaloc")));
+
+    [Theory]
     // The equivalence the whole evaluation dataset turns on (traps.md Y1).
     [InlineData("Paracetamol", "acetaminophen")]
     [InlineData("PARACETAMOL", "Acetaminophen")]

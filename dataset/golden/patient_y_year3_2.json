@@ -5,7 +5,8 @@
   "documentDate": "2007-07-07",
 
   "provider": {
-    "name": "Dr. Ankur Sharma",
+    "_note": "The page names two doctors - Dr Rakesh Kumar on the letterhead and Dr Ankur Sharma at the signature. Both are defensible readings of 'provider'; the letterhead is recorded because that is the conventional prescription header.",
+    "name": "Dr Rakesh Kumar",
     "facility": null
   },
 
