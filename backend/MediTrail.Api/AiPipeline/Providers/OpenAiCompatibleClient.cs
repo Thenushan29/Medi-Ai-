@@ -40,11 +40,13 @@ public sealed class OpenAiCompatibleClient(
             Model = model ?? _options.ExtractionModel,
             Temperature = _options.Temperature,
             MaxTokens = _options.MaxTokens,
-            // Groq rejects unknown top-level fields with a 400, so the switch is only sent to
-            // providers that define it.
+            // Each provider spells "do not think about it" differently, and sending the wrong
+            // one is a 400. Extraction is transcription, not deliberation (§11.2), and with
+            // thinking on a reasoning model spends its whole output budget before reaching the JSON.
             Reasoning = _options.Provider == AiProvider.OpenRouter
                 ? new ReasoningConfig { Enabled = false }
                 : null,
+            ReasoningEffort = _options.ResolveReasoningEffort(),
             Messages =
             [
                 new ChatMessage
@@ -70,11 +72,13 @@ public sealed class OpenAiCompatibleClient(
             Model = model ?? _options.ReasoningModel,
             Temperature = _options.Temperature,
             MaxTokens = _options.MaxTokens,
-            // Groq rejects unknown top-level fields with a 400, so the switch is only sent to
-            // providers that define it.
+            // Each provider spells "do not think about it" differently, and sending the wrong
+            // one is a 400. Extraction is transcription, not deliberation (§11.2), and with
+            // thinking on a reasoning model spends its whole output budget before reaching the JSON.
             Reasoning = _options.Provider == AiProvider.OpenRouter
                 ? new ReasoningConfig { Enabled = false }
                 : null,
+            ReasoningEffort = _options.ResolveReasoningEffort(),
             Messages =
             [
                 new ChatMessage { Role = "system", Content = [new ContentPart { Type = "text", Text = systemPrompt }] },
@@ -206,6 +210,9 @@ public sealed class OpenAiCompatibleClient(
         [JsonPropertyName("temperature")] public double Temperature { get; init; }
         [JsonPropertyName("max_tokens")] public int MaxTokens { get; init; }
         [JsonPropertyName("reasoning")] public ReasoningConfig? Reasoning { get; init; }
+
+        /// <summary>Groq: "none" or "default". Omitted when null.</summary>
+        [JsonPropertyName("reasoning_effort")] public string? ReasoningEffort { get; init; }
     }
 
     private sealed record ReasoningConfig

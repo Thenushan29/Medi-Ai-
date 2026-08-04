@@ -26,8 +26,15 @@ You are scored on being right, not on being complete.
 spelling, spacing, abbreviations and casing. This is shown to the user beside your reading so they
 can check you. Never tidy it up.
 
+**`brandName`** — the product name only. Strip the dosage-form prefix a prescription pad prints in
+front of it: `TAB. VOMILAST` → `VOMILAST`, `CAP. ZOCLAR 500` → `ZOCLAR 500`, `INJ. DICYCLOMINE` →
+`DICYCLOMINE`. The form belongs in `route` (`oral`, `IM`, `IV`, `sublingual`), not in the name.
+
 **`genericName`** — lowercase active ingredient. This is the join key for every downstream check, so
 accuracy matters more than coverage.
+
+If a document prints the ingredients directly beneath the brand — many clinic systems do — take the
+generic from **that line**, not from memory.
 - Fill it only when a pharmacist would be certain: `Panadol` → `paracetamol`, `Zoclar 500` →
   `clarithromycin`, `Augmentin` → `amoxicillin/clavulanic acid`.
 - Unfamiliar or regional brand with no legible ingredient line → `null`. Leave `brandName` as printed.
@@ -45,14 +52,19 @@ Non-numeric results (`Positive`, `Trace`) go in `valueText`, not `valueNumeric`.
 `testNameStandard` is a lowercase canonical name used to group the same test across labs —
 e.g. `SGPT`, `ALT (SGPT)`, `Alanine transaminase` all become `alt`.
 
-**`warningsInDocument`** — every caution, contraindication or advice line printed on the document.
-`relatesTo` lists the **generic** names it refers to, resolving brands as above.
+**`warningsInDocument`** — cautions printed on the document that concern a **medication or
+substance**. `relatesTo` lists the generic names involved, resolving brands as above.
 
-> "Avoid liver-toxic medications (e.g. acetaminophen)"
-> → `relatesTo: ["acetaminophen"]`
+> "Avoid liver-toxic medications (e.g. acetaminophen)" → `relatesTo: ["acetaminophen"]`
+> "Atenolol contraindicated in asthmatics" → `relatesTo: ["atenolol"]`
+> "Do not take aspirin on an empty stomach" → `relatesTo: ["aspirin"]`
 
 This matters even when the same document prescribes that drug. Report both faithfully; contradictions
 are found later, and hiding one here destroys the finding.
+
+General lifestyle advice naming no substance — "take bed rest", "drink boiled water", "avoid oily
+food", "revisit in 2 weeks" — is **not** a warning. Put it in `clinicalNotes`. Diluting this list
+with non-drug advice buries the contradictions it exists to surface.
 
 **`allergies`** — substances the patient reacts to. Distinct from warnings: an allergy is about the
 patient, a warning is advice printed on the page.

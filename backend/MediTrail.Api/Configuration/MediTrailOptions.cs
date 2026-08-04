@@ -41,6 +41,17 @@ public sealed class AiOptions
     [Required(AllowEmptyStrings = false)]
     public string ReasoningModel { get; set; } = "google/gemini-2.5-flash";
 
+    /// <summary>
+    /// Groq's switch for turning a reasoning model's thinking off — `none` or `default`.
+    /// Leave null to use the provider default; set to empty to send nothing (some non-reasoning
+    /// models reject the field).
+    ///
+    /// This matters more than it looks: with thinking on, a reasoning model spends its entire
+    /// output budget deliberating and the JSON comes back truncated. §11.2 asks for reasoning
+    /// tokens disabled anyway — extraction is transcription, not deliberation.
+    /// </summary>
+    public string? ReasoningEffort { get; set; }
+
     public string ResolveBaseUrl() => !string.IsNullOrWhiteSpace(BaseUrl)
         ? BaseUrl
         : Provider switch
@@ -48,6 +59,14 @@ public sealed class AiOptions
             AiProvider.Groq => "https://api.groq.com/openai/v1",
             _ => "https://openrouter.ai/api/v1"
         };
+
+    /// <summary>Null means "send nothing". Groq defaults to `none` unless overridden.</summary>
+    public string? ResolveReasoningEffort() => ReasoningEffort switch
+    {
+        null => Provider == AiProvider.Groq ? "none" : null,
+        "" => null,
+        _ => ReasoningEffort
+    };
 
     /// <summary>Temperature 0 for every call — extraction and cross-checking must be reproducible (§11.2).</summary>
     public double Temperature { get; set; }
