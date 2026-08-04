@@ -86,15 +86,46 @@ public sealed class PatientAnalyzer(
             logger.LogInformation("Analysis complete for {PatientId}: {Count} alert(s) across {Documents} document(s)",
                 patientId, alerts.Count, documentIds.Count);
         }
+        catch (DbUpdateException ex)
+        {
+            // Name the entities EF was writing. "Expected 1 row, affected 0" without them is
+            // unactionable, and this path is exactly where a bad merge shows up.
+            var entries = string.Join(", ", ex.Entries.Select(e => $"{e.Entity.GetType().Name}/{e.State}"));
+            logger.LogError(ex, "Analysis failed for patient {PatientId} while writing [{Entries}]",
+                patientId, entries);
+
+            await MarkFailedAsync(patient);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Analysis failed for patient {PatientId}", patientId);
 
-            patient.Status = PatientStatus.Failed;
-            patient.StatusMessage = "Analysis could not be completed. Your documents are safe — try again.";
-            patient.UpdatedAt = DateTimeOffset.UtcNow;
+            await MarkFailedAsync(patient);
+        }
+    }
+
+    /// <summary>
+    /// Records the failure without the poisoned change tracker: the entities that just failed are
+    /// still tracked, so saving through the same context would fail again and lose the status.
+    /// </summary>
+    private async Task MarkFailedAsync(Patient patient)
+    {
+        try
+        {
+            db.ChangeTracker.Clear();
+
+            var reloaded = await db.Patients.FirstOrDefaultAsync(p => p.Id == patient.Id);
+            if (reloaded is null) return;
+
+            reloaded.Status = PatientStatus.Failed;
+            reloaded.StatusMessage = "Analysis could not be completed. Your documents are safe — try again.";
+            reloaded.UpdatedAt = DateTimeOffset.UtcNow;
 
             await db.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Could not record analysis failure for {PatientId}", patient.Id);
         }
     }
 

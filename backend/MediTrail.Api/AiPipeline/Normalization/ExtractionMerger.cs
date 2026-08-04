@@ -55,19 +55,29 @@ public sealed class ExtractionMerger(
         // hallucinate a year, and a wrong year silently reorders the whole timeline.
         document.DocumentDate = DateNormalizer.Parse(extraction.DocumentDate);
 
-        MergeMedications(document, extraction);
-        MergeLabResults(document, extraction);
-        MergeAllergiesAndWarnings(document, extraction);
+        // Added through the DbSets rather than the parent's navigation collections. These entities
+        // generate their own Guid keys, and EF infers state from the key when it discovers an
+        // entity by fixup — a non-default key reads as "already exists", so it issues an UPDATE
+        // against a row that was never inserted. Adding explicitly states the intent.
+        var medications = BuildMedications(document, extraction);
+        var labResults = BuildLabResults(document, extraction);
+        var allergies = BuildAllergiesAndWarnings(document, extraction);
+
+        db.Medications.AddRange(medications);
+        db.LabResults.AddRange(labResults);
+        db.Allergies.AddRange(allergies);
 
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation(
             "Merged {DocumentId}: {Medications} medications, {Labs} lab results, {Allergies} allergies/warnings",
-            documentId, document.Medications.Count, document.LabResults.Count, document.Allergies.Count);
+            documentId, medications.Count, labResults.Count, allergies.Count);
     }
 
-    private static void MergeMedications(Document document, DocumentExtraction extraction)
+    private static List<Medication> BuildMedications(Document document, DocumentExtraction extraction)
     {
+        var medications = new List<Medication>();
+
         foreach (var source in extraction.Medications)
         {
             var generic = DrugNameNormalizer.Normalize(source.GenericName);
@@ -92,7 +102,7 @@ public sealed class ExtractionMerger(
                 ? start.Value.AddDays(source.DurationDays.Value - 1)
                 : null;
 
-            document.Medications.Add(new Medication
+            medications.Add(new Medication
             {
                 PatientId = document.PatientId,
                 DocumentId = document.Id,
@@ -112,15 +122,19 @@ public sealed class ExtractionMerger(
                 Confidence = source.Confidence
             });
         }
+
+        return medications;
     }
 
-    private static void MergeLabResults(Document document, DocumentExtraction extraction)
+    private static List<LabResult> BuildLabResults(Document document, DocumentExtraction extraction)
     {
+        var results = new List<LabResult>();
+
         foreach (var source in extraction.LabResults)
         {
             var standard = LabTestNormalizer.Standardize(source.TestNameStandard ?? source.TestName);
 
-            document.LabResults.Add(new LabResult
+            results.Add(new LabResult
             {
                 PatientId = document.PatientId,
                 DocumentId = document.Id,
@@ -139,6 +153,8 @@ public sealed class ExtractionMerger(
                 Confidence = source.Confidence
             });
         }
+
+        return results;
     }
 
     /// <summary>
@@ -147,13 +163,15 @@ public sealed class ExtractionMerger(
     /// generics are normalized through the same path as medication names — that is what makes
     /// "acetaminophen" collide with "Paracetamol".
     /// </summary>
-    private static void MergeAllergiesAndWarnings(Document document, DocumentExtraction extraction)
+    private static List<Allergy> BuildAllergiesAndWarnings(Document document, DocumentExtraction extraction)
     {
+        var entries = new List<Allergy>();
+
         foreach (var source in extraction.Allergies)
         {
             var generic = DrugNameNormalizer.Normalize(source.SubstanceGeneric ?? source.Substance);
 
-            document.Allergies.Add(new Allergy
+            entries.Add(new Allergy
             {
                 PatientId = document.PatientId,
                 DocumentId = document.Id,
@@ -181,7 +199,7 @@ public sealed class ExtractionMerger(
             // would dilute the list the contradiction check reads.
             if (generics.Count == 0) continue;
 
-            document.Allergies.Add(new Allergy
+            entries.Add(new Allergy
             {
                 PatientId = document.PatientId,
                 DocumentId = document.Id,
@@ -193,6 +211,8 @@ public sealed class ExtractionMerger(
                 Confidence = source.Confidence
             });
         }
+
+        return entries;
     }
 
     private static string? Trim(string? value) =>

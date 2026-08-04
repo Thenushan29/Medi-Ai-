@@ -85,8 +85,12 @@ public sealed class DocumentService(
                 else
                 {
                     document.Status = DocumentStatus.Queued;
-                    queued.Add(new ProcessingJob(patientId, document.Id));
                 }
+
+                // Queued whether or not extraction was reused. A cache hit skips the vision call,
+                // not the analysis — the merge and cross-checks still have to run, and this
+                // patient's other documents may make a cached one part of a new finding.
+                queued.Add(new ProcessingJob(patientId, document.Id));
 
                 db.Documents.Add(document);
 
@@ -111,7 +115,7 @@ public sealed class DocumentService(
 
         if (accepted.Count > 0)
         {
-            patient.Status = queued.Count > 0 ? PatientStatus.Extracting : PatientStatus.Ready;
+            patient.Status = PatientStatus.Extracting;
             patient.UpdatedAt = DateTimeOffset.UtcNow;
         }
 

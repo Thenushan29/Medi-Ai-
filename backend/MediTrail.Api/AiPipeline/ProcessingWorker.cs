@@ -102,8 +102,12 @@ public sealed class ProcessingWorker(
             return;
         }
 
+        // Already extracted — usually a cache hit, or a restart re-enqueue. Extraction is skipped,
+        // but the patient still has to be advanced, or a batch served entirely from cache would
+        // never be analyzed at all.
         if (document.Status is DocumentStatus.Extracted or DocumentStatus.Cached)
         {
+            await TryAdvancePatientAsync(db, job.PatientId, ct);
             return;
         }
 
@@ -170,15 +174,14 @@ public sealed class ProcessingWorker(
         }
         finally
         {
-            await TryAdvancePatientAsync(services, db, job.PatientId, ct);
+            await TryAdvancePatientAsync(db, job.PatientId, ct);
         }
     }
 
     /// <summary>
     /// Patient-level analysis runs once, after every document has reached a terminal state (§9.2).
     /// </summary>
-    private async Task TryAdvancePatientAsync(
-        IServiceProvider services, MediTrailDbContext db, Guid patientId, CancellationToken ct)
+    private async Task TryAdvancePatientAsync(MediTrailDbContext db, Guid patientId, CancellationToken ct)
     {
         try
         {
@@ -194,7 +197,12 @@ public sealed class ProcessingWorker(
 
             try
             {
-                var analyzer = services.GetRequiredService<IPatientAnalyzer>();
+                // A fresh scope, deliberately: analysis is a separate unit of work from extracting
+                // one document. Reusing the extraction scope hands the analyzer a change tracker
+                // that still holds the just-saved document, and EF then re-issues updates for
+                // entities it believes are dirty — which surfaces as a concurrency exception.
+                using var analysisScope = scopeFactory.CreateScope();
+                var analyzer = analysisScope.ServiceProvider.GetRequiredService<IPatientAnalyzer>();
                 await analyzer.AnalyzeAsync(patientId, ct);
             }
             finally

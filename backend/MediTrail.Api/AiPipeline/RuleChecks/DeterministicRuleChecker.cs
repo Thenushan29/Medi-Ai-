@@ -245,7 +245,10 @@ public sealed class DeterministicRuleChecker(
                         "Do not change anything yourself. Show this to your doctor or pharmacist before your next dose.",
                     Confidence = CombinedConfidence(matches.Select(m => m.Confidence).Append(entry.Confidence).ToArray()),
                     RequiresProfessionalConsult = true,
-                    VerificationStatus = VerificationStatus.Pending,
+                    // Established by the patient's own documents — one says avoid it, another
+                    // prescribes it. There is nothing for an external drug database to add, and
+                    // leaving this Pending would show "verification pending" forever.
+                    VerificationStatus = VerificationStatus.NotApplicable,
                     EvidenceDocumentIds = documents,
                     DetectedBy = "rules"
                 };
