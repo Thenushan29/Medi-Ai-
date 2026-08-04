@@ -106,11 +106,21 @@ public sealed class ExtractionMerger(
                 ? start.Value.AddDays(source.DurationDays.Value - 1)
                 : null;
 
+            // Models often echo the printed name into both fields when that name is itself the
+            // generic, which shows the user "Brand: Paracetamol" — paracetamol is not a brand.
+            // Cheaper and more reliable to drop the echo here than to keep asking the prompt not
+            // to produce it.
+            var brand = Trim(source.BrandName);
+            if (generic is not null && DrugNameNormalizer.AreSameDrug(brand, generic))
+            {
+                brand = null;
+            }
+
             medications.Add(new Medication
             {
                 PatientId = document.PatientId,
                 DocumentId = document.Id,
-                BrandName = Trim(source.BrandName),
+                BrandName = brand,
                 GenericName = generic,
                 StrengthValue = source.StrengthValue,
                 StrengthUnit = Trim(source.StrengthUnit)?.ToLowerInvariant(),
