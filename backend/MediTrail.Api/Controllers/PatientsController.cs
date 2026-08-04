@@ -1,3 +1,5 @@
+using MediTrail.Api.AiPipeline.Chat;
+using MediTrail.Api.AiPipeline.Trends;
 using MediTrail.Api.Contracts.Api;
 using MediTrail.Api.Middleware;
 using MediTrail.Api.Services;
@@ -14,7 +16,10 @@ namespace MediTrail.Api.Controllers;
 [Produces("application/json")]
 public sealed class PatientsController(
     IPatientService patients,
-    IDocumentService documents) : ControllerBase
+    IDocumentService documents,
+    IAnalysisService analysis,
+    ITrendAnalyzer trends,
+    IGroundedChatService chat) : ControllerBase
 {
     /// <summary>Creates a patient profile (FR-1.1).</summary>
     [HttpPost]
@@ -96,6 +101,50 @@ public sealed class PatientsController(
     {
         if (await patients.GetAsync(id, ct) is null) return NotFound(NotFoundError(id));
         return Ok(await documents.GetTimelineAsync(id, ct));
+    }
+
+    /// <summary>Cross-check findings with evidence, verification and confidence (FR-5.8).</summary>
+    [HttpGet("{id:guid}/alerts")]
+    [ProducesResponseType<IReadOnlyList<AlertDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<AlertDto>>> Alerts(Guid id, CancellationToken ct)
+    {
+        if (await patients.GetAsync(id, ct) is null) return NotFound(NotFoundError(id));
+        return Ok(await analysis.GetAlertsAsync(id, ct));
+    }
+
+    /// <summary>Medications grouped by generic, with conflict markers (§10.6).</summary>
+    [HttpGet("{id:guid}/medications")]
+    [ProducesResponseType<IReadOnlyList<MedicationGroupDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<MedicationGroupDto>>> Medications(Guid id, CancellationToken ct)
+    {
+        if (await patients.GetAsync(id, ct) is null) return NotFound(NotFoundError(id));
+        return Ok(await analysis.GetMedicationsAsync(id, ct));
+    }
+
+    /// <summary>One series per standardized test, with drift and a plain-language explanation (FR-6.x).</summary>
+    [HttpGet("{id:guid}/labs")]
+    [ProducesResponseType<IReadOnlyList<LabTrendDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<LabTrendDto>>> Labs(Guid id, CancellationToken ct)
+    {
+        if (await patients.GetAsync(id, ct) is null) return NotFound(NotFoundError(id));
+        return Ok(await trends.AnalyzeAsync(id, ct));
+    }
+
+    /// <summary>
+    /// Grounded question answering (FR-7.x). Answers come only from this patient's documents;
+    /// "not in your documents" is an expected outcome, not an error.
+    /// </summary>
+    [HttpPost("{id:guid}/ask")]
+    [ProducesResponseType<ChatAnswerDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ChatAnswerDto>> Ask(Guid id, AskRequest request, CancellationToken ct)
+    {
+        if (await patients.GetAsync(id, ct) is null) return NotFound(NotFoundError(id));
+        return Ok(await chat.AskAsync(id, request.Question, ct));
     }
 
     private ApiError NotFoundError(Guid id) => new()

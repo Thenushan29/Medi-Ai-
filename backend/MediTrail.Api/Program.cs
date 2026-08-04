@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using MediTrail.Api.AiPipeline;
+using MediTrail.Api.AiPipeline.Chat;
 using MediTrail.Api.AiPipeline.CrossCheck;
+using MediTrail.Api.AiPipeline.Trends;
 using MediTrail.Api.AiPipeline.Extraction;
 using MediTrail.Api.AiPipeline.Normalization;
 using MediTrail.Api.AiPipeline.Providers;
@@ -102,6 +104,9 @@ builder.Services.AddHostedService<ProcessingWorker>();
 // ---------------------------------------------------------------------------
 builder.Services.AddScoped<IPatientService, PatientService>();
 builder.Services.AddScoped<IDocumentService, DocumentService>();
+builder.Services.AddScoped<IAnalysisService, AnalysisService>();
+builder.Services.AddScoped<ITrendAnalyzer, TrendAnalyzer>();
+builder.Services.AddScoped<IGroundedChatService, GroundedChatService>();
 
 // ---------------------------------------------------------------------------
 // Web
