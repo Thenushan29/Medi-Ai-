@@ -156,7 +156,10 @@ import type { DocumentDetail } from '../../core/models';
                     <li class="px-5 py-4">
                       <div class="flex items-start justify-between gap-4">
                         <p class="text-sm text-slate-900">
-                          {{ a.substance }}
+                          <!-- A warning reads as the sentence printed on the document; its
+                               substance column names only the drug, which "Refers to" below
+                               already gives. -->
+                          {{ (a.isDocumentWarning ? a.sourceText : null) || a.substance }}
                           @if (a.isDocumentWarning) {
                             <span class="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
                               printed warning
@@ -169,7 +172,8 @@ import type { DocumentDetail } from '../../core/models';
                       @if (a.relatesTo.length > 0) {
                         <p class="mt-1 text-xs text-slate-500">Refers to: {{ a.relatesTo.join(', ') }}</p>
                       }
-                      @if (a.sourceText) {
+                      <!-- Not repeated for a warning, where it is already the line above. -->
+                      @if (a.sourceText && !a.isDocumentWarning) {
                         <p class="mt-2 border-l-2 border-slate-200 pl-3 font-mono text-xs text-slate-500">
                           {{ a.sourceText }}
                         </p>

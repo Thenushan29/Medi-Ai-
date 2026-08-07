@@ -29,7 +29,20 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
     <section class="mx-auto max-w-5xl px-6 py-10">
       @if (patient(); as p) {
         <header class="border-b border-slate-200 pb-6">
-          <h1 class="text-2xl font-semibold tracking-tight text-slate-900">{{ p.displayName }}</h1>
+          <!-- Name left, add-documents right (FR-2.9). items-start keeps the two aligned on a
+               narrow screen where the name wraps, and leaves the chips below flush left. -->
+          <div class="flex items-start justify-between gap-4">
+            <h1 class="text-2xl font-semibold tracking-tight text-slate-900">{{ p.displayName }}</h1>
+
+            <!-- Secondary, not primary: the point of this screen is reading the findings. -->
+            <a
+              [routerLink]="['/patients', patientId(), 'upload']"
+              aria-label="Add more documents for this patient"
+              class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-700"
+            >
+              + Add documents
+            </a>
+          </div>
 
           <div class="mt-4 flex flex-wrap gap-2">
             <span class="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600">
@@ -141,7 +154,20 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
                               }
                             </p>
                           </div>
-                          <mt-confidence [score]="entry.overallConfidence" />
+                          <div class="flex shrink-0 items-center gap-2">
+                            <!-- Slate, not a severity colour: a reused extraction is information
+                                 about how the file was processed, not a risk (FR-2.6). Without it
+                                 two identical cards look like the system missed the duplicate. -->
+                            @if (entry.status === 'Cached') {
+                              <span
+                                class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+                                title="This file is byte-identical to one already uploaded, so the earlier extraction was reused."
+                              >
+                                Same file — reused, no AI call
+                              </span>
+                            }
+                            <mt-confidence [score]="entry.overallConfidence" />
+                          </div>
                         </div>
 
                         @if (entry.status === 'Failed') {

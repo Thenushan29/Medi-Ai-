@@ -144,25 +144,37 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 
 builder.Services.AddOpenApi();
 
-// CORS restricted to the deployed frontend origin (§13 conventions).
+// CORS exists only for cross-origin development (ng serve → API). Production serves the
+// Angular app from wwwroot on the same origin, so no policy is registered there unless
+// origins are explicitly configured. Origins always come from configuration, never code.
 const string CorsPolicy = "meditrail-frontend";
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-    ?? ["http://localhost:4200"];
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+var corsEnabled = allowedOrigins.Length > 0;
 
-builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy => policy
-    .WithOrigins(allowedOrigins)
-    .AllowAnyHeader()
-    .AllowAnyMethod()));
+if (corsEnabled)
+{
+    builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy => policy
+        .WithOrigins(allowedOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()));
+}
 
 var app = builder.Build();
 
 app.UseMiddleware<ErrorHandlingMiddleware>();
 
+// The Angular build lands in wwwroot; serve index.html at "/" and its hashed assets.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 // Swagger enabled in all environments (§13) — judges can inspect the API directly.
 app.MapOpenApi();
 app.MapScalarApiReference(options => options.WithTitle("MediTrail API"));
 
-app.UseCors(CorsPolicy);
+if (corsEnabled)
+{
+    app.UseCors(CorsPolicy);
+}
 
 // Every API response is a live view of the record, so none of it may be cached. Without this the
 // browser reuses a GET it already has: delete a document and the timeline still shows it until the
@@ -231,5 +243,10 @@ app.MapGet("/health/ready", async (
         : Results.Json(new { status = "not ready", database, bucket }, statusCode: 503);
 })
 .WithName("Readiness");
+
+// SPA fallback — MUST stay after MapControllers and the health endpoints. Anything that
+// no API route claims (e.g. a deep link like /patients/42) gets index.html and the
+// Angular router takes over. If this ran first, /api calls would receive HTML.
+app.MapFallbackToFile("index.html");
 
 app.Run();

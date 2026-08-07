@@ -17,7 +17,10 @@ public class Allergy
     /// <summary>False = a recorded allergy. True = advice text printed on the document.</summary>
     public bool IsDocumentWarning { get; set; }
 
-    /// <summary>Substance as written. For a warning this is the full warning text.</summary>
+    /// <summary>
+    /// The substance as written. For a warning this is the substance(s) it concerns, not the
+    /// sentence — the sentence is evidence and lives in <see cref="SourceText"/>.
+    /// </summary>
     public string? Substance { get; set; }
 
     /// <summary>Lowercase generic, so "Paracetamol" and "acetaminophen" collide correctly (US-4).</summary>

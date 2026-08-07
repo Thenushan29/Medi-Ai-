@@ -73,6 +73,7 @@ public sealed class PatientAnalyzer(
             alerts.AddRange(await LowConfidenceAlertsAsync(patientId, ct));
 
             alerts = Deduplicate(alerts);
+            await CollapseEvidenceToDistinctFilesAsync(patientId, alerts, ct);
             db.Alerts.AddRange(alerts);
 
             patient.Status = PatientStatus.Ready;
@@ -138,6 +139,40 @@ public sealed class PatientAnalyzer(
             .ToList();
 
     /// <summary>
+    /// One piece of paper, one evidence chip (Principle 3, §10.9).
+    ///
+    /// A byte-identical re-upload is still its own document row, so an alert that touches both
+    /// copies cites both, and the card reads "Evidence: 3.jpg 2.jpg 2.jpg" — implying the problem
+    /// was found in three places when there is one page. Documents sharing a file hash collapse to
+    /// the earliest uploaded copy; everything else stays as it was, including two genuinely
+    /// different files from the same visit. The hash is the only thing that collapses evidence.
+    /// </summary>
+    private async Task CollapseEvidenceToDistinctFilesAsync(
+        Guid patientId, List<Alert> alerts, CancellationToken ct)
+    {
+        var documents = await db.Documents
+            .AsNoTracking()
+            .Where(d => d.PatientId == patientId)
+            .Select(d => new { d.Id, d.Sha256, d.CreatedAt })
+            .ToListAsync(ct);
+
+        var hashByDocument = documents.ToDictionary(d => d.Id, d => d.Sha256);
+
+        var representativeByHash = documents
+            .GroupBy(d => d.Sha256)
+            // Id breaks the tie so a re-analysis of the same record picks the same copy every time.
+            .ToDictionary(g => g.Key, g => g.OrderBy(d => d.CreatedAt).ThenBy(d => d.Id).First().Id);
+
+        foreach (var alert in alerts)
+        {
+            alert.EvidenceDocumentIds = alert.EvidenceDocumentIds
+                .Select(id => hashByDocument.TryGetValue(id, out var hash) ? representativeByHash[hash] : id)
+                .Distinct()
+                .ToList();
+        }
+    }
+
+    /// <summary>
     /// Records the failure without the poisoned change tracker: the entities that just failed are
     /// still tracked, so saving through the same context would fail again and lose the status.
     /// </summary>
@@ -195,6 +230,7 @@ public sealed class PatientAnalyzer(
                         : "Some documents were only partly readable, and ") +
                     "anything on them may be missing from the checks above. " +
                     "Findings can only cover what could actually be read.",
+                ExplanationTa = RuleFindingTamil.LowExtractionConfidence(unreadable),
                 SuggestedActionEn =
                     "Re-upload a clearer photo of these, or show the originals to your pharmacist.",
                 Confidence = 100,

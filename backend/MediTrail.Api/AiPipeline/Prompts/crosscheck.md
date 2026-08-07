@@ -18,6 +18,11 @@ Return a single JSON object. No prose, no markdown fences — begin with `{` and
 Duplicates, dosage conflicts, allergy contradictions and printed-warning contradictions are already
 handled elsewhere. **Do not report them.** Report interactions between *different* medicines only.
 
+Each medicine below carries the period it was active. **Only report a pair the person could have
+been taking at the same time.** Two courses that finished years apart never met in the body, and
+reporting them as interacting is misleading. Where a date could not be read, the list says so —
+judge those on the medicines themselves.
+
 # Severity
 
 - `red` — a combination with a serious, well-documented risk (bleeding, serotonin syndrome,

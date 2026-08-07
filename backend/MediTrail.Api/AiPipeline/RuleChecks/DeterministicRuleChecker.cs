@@ -99,6 +99,7 @@ public sealed class DeterministicRuleChecker(
                         ExplanationEn =
                             $"{Display(group.Key)} appears on two different documents with overlapping " +
                             $"dates{Prescribers(a, b)}. Taking both at once would mean a double dose.",
+                        ExplanationTa = RuleFindingTamil.DuplicatePrescription(Display(group.Key)),
                         SuggestedActionEn =
                             "Show both prescriptions to your pharmacist and ask which one to follow.",
                         Confidence = CombinedConfidence(a.Confidence, b.Confidence),
@@ -150,6 +151,7 @@ public sealed class DeterministicRuleChecker(
                         ExplanationEn =
                             $"{Display(group.Key)} is written as {Dose(a)} on one document and " +
                             $"{Dose(b)} on another. These do not match.",
+                        ExplanationTa = RuleFindingTamil.DosageConflict(Display(group.Key), a, b),
                         SuggestedActionEn =
                             "Ask your doctor or pharmacist which dose is the current one.",
                         Confidence = CombinedConfidence(a.Confidence, b.Confidence),
@@ -166,6 +168,10 @@ public sealed class DeterministicRuleChecker(
     /// <summary>
     /// Two different drugs from one therapeutic class taken together — the dataset carries three
     /// beta-blockers (traps.md Y3). The generics differ, so the duplicate check above cannot see it.
+    ///
+    /// Scoped in time like the interaction check (§11.1): the finding is "you may be taking two of
+    /// these at once", which is only true of prescriptions whose windows meet. A beta-blocker
+    /// stopped in 2007 and another started in 2019 is a change of therapy, not double therapy.
     /// </summary>
     private static IEnumerable<Alert> FindDuplicateTherapeuticClass(Guid patientId, List<Medication> medications)
     {
@@ -176,37 +182,99 @@ public sealed class DeterministicRuleChecker(
 
         foreach (var group in classified.GroupBy(x => x.Class!))
         {
-            var distinctDrugs = group
+            var byGeneric = group
                 .GroupBy(x => x.Medication.GenericName!)
-                .ToList();
+                .ToDictionary(g => g.Key, g => g.Select(x => x.Medication).ToList());
 
-            if (distinctDrugs.Count < 2) continue;
+            if (byGeneric.Count < 2) continue;
 
-            var names = distinctDrugs.Select(g => Display(g.Key)).ToList();
-            var documents = group.Select(x => x.Medication.DocumentId).Distinct().ToList();
-            var confidences = group.Select(x => x.Medication.Confidence).ToArray();
-
-            yield return new Alert
+            foreach (var cluster in ConcurrentClusters(byGeneric))
             {
-                PatientId = patientId,
-                Type = AlertType.DuplicatePrescription,
-                Severity = AlertSeverity.Red,
-                Title = $"{names.Count} {group.Key}s in your records",
-                InvolvedGenerics = distinctDrugs.Select(g => g.Key).ToList(),
-                ExplanationEn =
-                    $"{string.Join(", ", names)} all belong to the same group of medicines " +
-                    $"({group.Key}s). They do the same job, so taking more than one together can " +
-                    "have a much stronger effect than intended.",
-                SuggestedActionEn =
-                    "Bring all of these to your doctor or pharmacist and ask whether you should be taking more than one.",
-                Confidence = CombinedConfidence(confidences),
-                RequiresProfessionalConsult = true,
-                VerificationStatus = VerificationStatus.NotApplicable,
-                EvidenceDocumentIds = documents,
-                DetectedBy = "rules"
-            };
+                var names = cluster.Generics.Select(Display).ToList();
+                var rows = cluster.Generics.SelectMany(g => byGeneric[g]).ToList();
+
+                var caveat = cluster.DatesUnknown
+                    ? " " + MedicationWindowCalculator.DateUnknownCaveatEn
+                    : string.Empty;
+
+                var tamil = RuleFindingTamil.DuplicateTherapeuticClass(names, group.Key);
+
+                yield return new Alert
+                {
+                    PatientId = patientId,
+                    Type = AlertType.DuplicatePrescription,
+                    Severity = AlertSeverity.Red,
+                    Title = $"{names.Count} {group.Key}s in your records",
+                    InvolvedGenerics = cluster.Generics,
+                    ExplanationEn =
+                        $"{string.Join(", ", names)} all belong to the same group of medicines " +
+                        $"({group.Key}s). They do the same job, so taking more than one together can " +
+                        "have a much stronger effect than intended." + caveat,
+                    ExplanationTa = tamil is null || !cluster.DatesUnknown
+                        ? tamil
+                        : tamil + " " + MedicationWindowCalculator.DateUnknownCaveatTa,
+                    SuggestedActionEn =
+                        "Bring all of these to your doctor or pharmacist and ask whether you should be taking more than one.",
+                    Confidence = CombinedConfidence(rows.Select(m => m.Confidence).ToArray()),
+                    RequiresProfessionalConsult = true,
+                    VerificationStatus = VerificationStatus.NotApplicable,
+                    EvidenceDocumentIds = rows.Select(m => m.DocumentId).Distinct().ToList(),
+                    DetectedBy = "rules"
+                };
+            }
         }
     }
+
+    /// <summary>
+    /// Groups the generics of one therapeutic class into sets the patient could plausibly have been
+    /// taking together, by walking the "concurrent with" relation.
+    ///
+    /// Membership is transitive on purpose: if A overlapped B and B overlapped C, the patient was
+    /// on two of this class at some point either way, which is exactly what the finding claims.
+    /// A pair whose concurrency could not be established (an unreadable document date) still links —
+    /// dropping it would let a failed extraction silently delete a real finding — but the cluster
+    /// then carries the caveat.
+    /// </summary>
+    private static IEnumerable<ClassCluster> ConcurrentClusters(Dictionary<string, List<Medication>> byGeneric)
+    {
+        var generics = byGeneric.Keys.ToList();
+        var seen = new HashSet<string>();
+
+        foreach (var root in generics)
+        {
+            if (!seen.Add(root)) continue;
+
+            var cluster = new List<string> { root };
+            var queue = new Queue<string>([root]);
+            var datesUnknown = false;
+
+            while (queue.Count > 0)
+            {
+                var current = queue.Dequeue();
+
+                foreach (var candidate in generics)
+                {
+                    if (seen.Contains(candidate)) continue;
+
+                    var verdict = MedicationWindowCalculator.Compare(byGeneric[current], byGeneric[candidate]);
+                    if (verdict == Concurrency.NotConcurrent) continue;
+
+                    datesUnknown |= verdict == Concurrency.DateUnknown;
+
+                    seen.Add(candidate);
+                    cluster.Add(candidate);
+                    queue.Enqueue(candidate);
+                }
+            }
+
+            if (cluster.Count < 2) continue;
+
+            yield return new ClassCluster(cluster, datesUnknown);
+        }
+    }
+
+    /// <summary>Generics of one class that were, or may have been, in use at the same time.</summary>
+    private sealed record ClassCluster(List<string> Generics, bool DatesUnknown);
 
     /// <summary>
     /// A medication matching a recorded allergy (FR-5.4) or a warning printed on any document,
@@ -251,6 +319,11 @@ public sealed class DeterministicRuleChecker(
                           $"{Display(substance)}" +
                           (entry.Reaction is null ? "." : $" ({entry.Reaction}).")
                     ,
+                    ExplanationTa = entry.IsDocumentWarning
+                        ? RuleFindingTamil.DocumentWarningConflict(
+                            drugName, Display(substance), entry.SourceText ?? entry.Substance,
+                            sameDocument, IsSameMedicineUnderAnotherName(drugName, substance))
+                        : RuleFindingTamil.AllergyConflict(drugName, Display(substance), entry.Reaction),
                     SuggestedActionEn =
                         "Do not change anything yourself. Show this to your doctor or pharmacist before your next dose.",
                     Confidence = CombinedConfidence(matches.Select(m => m.Confidence).Append(entry.Confidence).ToArray()),
@@ -269,7 +342,10 @@ public sealed class DeterministicRuleChecker(
     private static string BuildWarningExplanation(
         string drugName, string substance, Allergy entry, bool sameDocument)
     {
-        var warning = entry.Substance ?? entry.SourceText ?? "a printed warning";
+        // Quote the printed sentence, not the substance column: "avoid liver-toxic medications
+        // (e.g. acetaminophen)" is the contradiction the reader has to see, and Substance now
+        // holds only the drug name.
+        var warning = entry.SourceText ?? entry.Substance ?? "a printed warning";
 
         var opening = sameDocument
             ? $"This document prescribes {drugName}, while its own advice section says: \"{warning}\"."
@@ -277,13 +353,16 @@ public sealed class DeterministicRuleChecker(
 
         // The point of the finding is usually that the two names are the same molecule — say so,
         // because a reader who does not know that will not see the contradiction.
-        var equivalence = DrugNameNormalizer.AreSameDrug(drugName, substance)
-                          && !string.Equals(drugName, substance, StringComparison.OrdinalIgnoreCase)
+        var equivalence = IsSameMedicineUnderAnotherName(drugName, substance)
             ? $" {Display(substance)} and {drugName} are the same medicine under different names."
             : string.Empty;
 
         return opening + equivalence;
     }
+
+    private static bool IsSameMedicineUnderAnotherName(string drugName, string substance) =>
+        DrugNameNormalizer.AreSameDrug(drugName, substance)
+        && !string.Equals(drugName, substance, StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<Alert> FindOutOfRangeLabs(Guid patientId, List<LabResult> labs)
     {
@@ -292,18 +371,22 @@ public sealed class DeterministicRuleChecker(
             var range = lab.NormalRangeText
                 ?? $"{lab.NormalMin?.ToString() ?? "?"}–{lab.NormalMax?.ToString() ?? "?"}";
 
-            var direction = lab.NormalMax is not null && lab.ValueNumeric > lab.NormalMax ? "above" : "below";
+            var above = lab.NormalMax is not null && lab.ValueNumeric > lab.NormalMax;
+            var direction = above ? "above" : "below";
+            var testName = lab.TestName ?? lab.TestNameStandard!;
 
             yield return new Alert
             {
                 PatientId = patientId,
                 Type = AlertType.LabOutOfRange,
                 Severity = AlertSeverity.Amber,
-                Title = $"{lab.TestName ?? lab.TestNameStandard} is outside the normal range",
+                Title = $"{testName} is outside the normal range",
                 InvolvedGenerics = [],
                 ExplanationEn =
-                    $"Your {lab.TestName ?? lab.TestNameStandard} was {lab.ValueNumeric}{Unit(lab)}, " +
+                    $"Your {testName} was {lab.ValueNumeric}{Unit(lab)}, " +
                     $"which is {direction} the normal range printed on the report ({range}).",
+                ExplanationTa = RuleFindingTamil.LabOutOfRange(
+                    testName, lab.ValueNumeric, Unit(lab), range, above),
                 SuggestedActionEn = "Ask your doctor what this result means for you.",
                 Confidence = lab.Confidence ?? 70,
                 RequiresProfessionalConsult = false,

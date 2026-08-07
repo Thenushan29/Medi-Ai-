@@ -44,6 +44,8 @@ Thumbs.db
 /tmp/
 /backend/**/uploads/
 /backend/**/wwwroot/uploads/
+# Angular production build output (frontend builds into the API's wwwroot).
+/backend/MediTrail.Api/wwwroot/
 *.pipeline.json
 
 # ---------- Dataset ----------

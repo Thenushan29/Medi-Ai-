@@ -1,4 +1,5 @@
 using MediTrail.Api.AiPipeline.Normalization;
+using MediTrail.Api.Data.Entities;
 
 namespace MediTrail.Tests;
 
@@ -254,4 +255,96 @@ public class LabTestNormalizerTests
     public void DoesNotFlagWhenTheDocumentPrintedNoRange() =>
         // We only ever flag against a range the document itself supplied (FR-6.3).
         Assert.False(LabTestNormalizer.IsOutOfRange(500, null, null));
+}
+
+/// <summary>
+/// The window arithmetic behind the temporal gate on cross-checking (§11.1). Deterministic, so it
+/// can be pinned down exactly — the model never gets a say in whether two drugs were concurrent.
+/// </summary>
+public class MedicationWindowCalculatorTests
+{
+    [Fact]
+    public void UsesThePrintedDurationAsTheWindow()
+    {
+        var window = MedicationWindowCalculator.For(
+            Med(start: new DateOnly(2007, 7, 7), durationDays: 15));
+
+        Assert.Equal(new DateOnly(2007, 7, 7), window.Start);
+        Assert.Equal(new DateOnly(2007, 7, 21), window.End);
+    }
+
+    [Fact]
+    public void AssumesAConservativeCourseWhenNoDurationWasPrinted()
+    {
+        var window = MedicationWindowCalculator.For(Med(start: new DateOnly(2023, 1, 1), frequency: "1 od"));
+
+        // Finite, not indefinite: an absent duration is missing information, not evidence that the
+        // drug is still being taken years later.
+        Assert.Equal(new DateOnly(2023, 1, 30), window.End);
+        Assert.False(window.IsOpenEnded);
+    }
+
+    [Theory]
+    // Wording that says the drug has no stop date. The sublingual nitrate in the dataset is the
+    // real case: "as and when required" genuinely is still in use later.
+    [InlineData("sublingually as and when required", null)]
+    [InlineData("1 od sos", null)]
+    [InlineData("PRN", null)]
+    [InlineData(null, "continue same dose")]
+    [InlineData(null, "long-term maintenance therapy")]
+    public void StaysOpenEndedWhenTheInstructionsSayItContinues(string? frequency, string? instructions) =>
+        Assert.True(MedicationWindowCalculator
+            .For(Med(start: new DateOnly(2007, 7, 7), frequency: frequency, instructions: instructions))
+            .IsOpenEnded);
+
+    [Fact]
+    public void ReportsNoWindowWhenTheDocumentDateCouldNotBeRead() =>
+        Assert.True(MedicationWindowCalculator.For(Med(start: null)).IsUnknown);
+
+    [Fact]
+    public void TenYearsApartIsNotConcurrent() =>
+        Assert.Equal(Concurrency.NotConcurrent, MedicationWindowCalculator.Compare(
+            Med(start: new DateOnly(2013, 4, 2), durationDays: 15),
+            Med(start: new DateOnly(2023, 4, 2), durationDays: 24)));
+
+    [Fact]
+    public void TouchingWindowsAreConcurrent() =>
+        // Windows that meet on a single day still overlap — the last dose of one is the first of
+        // the other.
+        Assert.Equal(Concurrency.Overlapping, MedicationWindowCalculator.Compare(
+            Med(start: new DateOnly(2023, 4, 2), durationDays: 15),
+            Med(start: new DateOnly(2023, 4, 16), durationDays: 10)));
+
+    [Fact]
+    public void AnUnreadableDateIsSaidOutLoudRatherThanGuessedEitherWay() =>
+        Assert.Equal(Concurrency.DateUnknown, MedicationWindowCalculator.Compare(
+            Med(start: new DateOnly(2013, 4, 2), durationDays: 15),
+            Med(start: null)));
+
+    [Fact]
+    public void TwoRowsFromOneDocumentAreAlwaysConcurrent()
+    {
+        var documentId = Guid.NewGuid();
+
+        // Same page, no readable date on it: the same-document contradiction (FR-5.5) cannot be
+        // allowed to depend on date reasoning.
+        Assert.Equal(Concurrency.Overlapping, MedicationWindowCalculator.Compare(
+            Med(start: null, documentId: documentId),
+            Med(start: null, documentId: documentId)));
+    }
+
+    private static Medication Med(DateOnly? start, int? durationDays = null, string? frequency = null,
+        string? instructions = null, Guid? documentId = null) =>
+        new()
+        {
+            DocumentId = documentId ?? Guid.NewGuid(),
+            GenericName = "atenolol",
+            Frequency = frequency,
+            Instructions = instructions,
+            DurationDays = durationDays,
+            StartDate = start,
+            EndDate = start is not null && durationDays is > 0
+                ? start.Value.AddDays(durationDays.Value - 1)
+                : null
+        };
 }
