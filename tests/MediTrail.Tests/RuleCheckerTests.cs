@@ -1,3 +1,4 @@
+using MediTrail.Api.AiPipeline.Normalization;
 using MediTrail.Api.AiPipeline.RuleChecks;
 using MediTrail.Api.Data;
 using MediTrail.Api.Data.Entities;
@@ -63,20 +64,68 @@ public class RuleCheckerTests : IDisposable
         Assert.Contains(documentId, alert.EvidenceDocumentIds);
         Assert.Contains("same document", alert.Title, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("same medicine", alert.ExplanationEn!, StringComparison.OrdinalIgnoreCase);
+
+        // The explanation quotes the printed sentence, not the substance column — a reader shown
+        // only "acetaminophen" cannot see what the document actually advised.
+        Assert.Contains("liver-toxic", alert.ExplanationEn!, StringComparison.OrdinalIgnoreCase);
+
+        // The demo finding is rule-detected, so its Tamil comes from the templates or not at all
+        // (FR-5.8). The quoted warning and both drug names carry over.
+        Assert.Contains("Paracetamol", alert.ExplanationTa!, StringComparison.Ordinal);
+        Assert.Contains("liver-toxic", alert.ExplanationTa!, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>traps.md Y3 — three beta-blockers whose generic names all differ.</summary>
+    /// <summary>
+    /// FR-5.8 and Principle 6: a rule finding is bilingual by construction. Nothing downstream
+    /// fills <c>ExplanationTa</c> in for the deterministic checks, so an alert without it renders
+    /// the "Tamil not available yet" fallback forever.
+    /// </summary>
+    [Fact]
+    public async Task RuleDetectedAllergyConflictCarriesATamilExplanation()
+    {
+        var allergyDoc = Guid.NewGuid();
+        var rxDoc = Guid.NewGuid();
+        AddDocument(allergyDoc, new DateOnly(2019, 8, 5));
+        AddDocument(rxDoc, new DateOnly(2011, 7, 15));
+
+        AddAllergy(allergyDoc, substance: "Penicillin", reaction: "rash");
+        AddMedication(rxDoc, generic: "amoxicillin", perDay: 2);
+
+        await _db.SaveChangesAsync();
+
+        var alert = Assert.Single(await _checker.CheckAsync(_patientId),
+            a => a.Type == AlertType.AllergyConflict);
+
+        Assert.False(string.IsNullOrWhiteSpace(alert.ExplanationTa));
+
+        // Drug names stay in their printed form inside the Tamil sentence — transliterating them
+        // would leave the reader unable to match the word to the box in their hand.
+        Assert.Contains("Amoxicillin", alert.ExplanationTa!, StringComparison.Ordinal);
+        Assert.Contains("Penicillin", alert.ExplanationTa!, StringComparison.Ordinal);
+
+        // Tamil, not the English sentence copied into the Tamil column.
+        Assert.NotEqual(alert.ExplanationEn, alert.ExplanationTa);
+    }
+
+    /// <summary>
+    /// traps.md Y3 — three beta-blockers whose generic names all differ, in the shape the dataset
+    /// actually has them: atenolol on the dated 2007 prescription, metoprolol and oxprenolol on
+    /// `y_year3_6`, whose printed date (`09-11-12`) is ambiguous and normalizes to null (Y11).
+    ///
+    /// The temporal gate must not turn an unreadable date into a silently dropped finding: the
+    /// three still cluster, and the alert says the concurrency could not be established.
+    /// </summary>
     [Fact]
     public async Task DetectsDuplicateTherapeuticClass_ThreeBetaBlockers()
     {
-        var a = Guid.NewGuid();
-        var b = Guid.NewGuid();
-        AddDocument(a, new DateOnly(2007, 7, 7));
-        AddDocument(b, new DateOnly(2012, 11, 9));
+        var dated = Guid.NewGuid();
+        var undated = Guid.NewGuid();
+        AddDocument(dated, new DateOnly(2007, 7, 7));
+        AddDocument(undated, null);
 
-        AddMedication(a, generic: "atenolol", strength: 50, perDay: 1);
-        AddMedication(b, generic: "metoprolol", strength: 100, perDay: 2);
-        AddMedication(b, generic: "oxprenolol", strength: 50, perDay: 1);
+        AddMedication(dated, generic: "atenolol", strength: 50, perDay: 1);
+        AddMedication(undated, generic: "metoprolol", strength: 100, perDay: 2);
+        AddMedication(undated, generic: "oxprenolol", strength: 50, perDay: 1);
 
         await _db.SaveChangesAsync();
 
@@ -88,6 +137,55 @@ public class RuleCheckerTests : IDisposable
         Assert.Equal(AlertSeverity.Red, alert.Severity);
         Assert.Contains("beta blocker", alert.Title, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(2, alert.EvidenceDocumentIds.Count);
+
+        Assert.Contains("no readable date", alert.ExplanationEn!);
+        Assert.Contains(MedicationWindowCalculator.DateUnknownCaveatTa, alert.ExplanationTa!);
+    }
+
+    /// <summary>
+    /// Two beta-blockers on one page (traps.md Y4) need no date reasoning at all — one prescription
+    /// is one prescribing decision.
+    /// </summary>
+    [Fact]
+    public async Task DetectsTwoBetaBlockersOnOneUndatedPrescriptionWithoutCaveat()
+    {
+        var documentId = Guid.NewGuid();
+        AddDocument(documentId, null);
+
+        AddMedication(documentId, generic: "metoprolol", strength: 100, perDay: 2);
+        AddMedication(documentId, generic: "oxprenolol", strength: 50, perDay: 1);
+
+        await _db.SaveChangesAsync();
+
+        var alert = Assert.Single(await _checker.CheckAsync(_patientId),
+            x => x.Type == AlertType.DuplicatePrescription);
+
+        Assert.Equal(2, alert.InvolvedGenerics.Count);
+        Assert.DoesNotContain("no readable date", alert.ExplanationEn!);
+    }
+
+    /// <summary>
+    /// A beta-blocker stopped in 2007 and another started in 2019 is a change of therapy, not two
+    /// at once. The finding claims the patient may be taking both — with dated, non-overlapping
+    /// courses that claim is simply false.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotReportTherapeuticClassDuplicateAcrossNonOverlappingYears()
+    {
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        AddDocument(first, new DateOnly(2007, 7, 7));
+        AddDocument(second, new DateOnly(2019, 8, 5));
+
+        AddMedication(first, generic: "atenolol", strength: 50, perDay: 1,
+            start: new DateOnly(2007, 7, 7), end: new DateOnly(2007, 7, 21));
+        AddMedication(second, generic: "metoprolol", strength: 100, perDay: 2,
+            start: new DateOnly(2019, 8, 5), end: new DateOnly(2019, 8, 19));
+
+        await _db.SaveChangesAsync();
+
+        Assert.DoesNotContain(await _checker.CheckAsync(_patientId),
+            a => a.Type == AlertType.DuplicatePrescription);
     }
 
     /// <summary>A penicillin allergy has to catch amoxicillin, which is not the same generic.</summary>
@@ -176,6 +274,33 @@ public class RuleCheckerTests : IDisposable
         Assert.DoesNotContain(alerts, a => a.Type == AlertType.DosageConflict);
     }
 
+    /// <summary>
+    /// The same case as it actually reaches the checker after a re-upload: the second document is
+    /// marked <see cref="DocumentStatus.Cached"/>, its extraction reused rather than re-billed
+    /// (FR-2.6). Status must make no difference — the file hash is what decides.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotReportDuplicateWhenTheSecondDocumentWasServedFromCache()
+    {
+        var original = Guid.NewGuid();
+        var reupload = Guid.NewGuid();
+        const string SharedHash = "f0e1d2c3b4a59687f0e1d2c3b4a59687f0e1d2c3b4a59687f0e1d2c3b4a59687";
+
+        AddDocument(original, new DateOnly(2023, 8, 30), sha256: SharedHash);
+        AddDocument(reupload, new DateOnly(2023, 8, 30), sha256: SharedHash,
+            status: DocumentStatus.Cached);
+
+        AddMedication(original, generic: "clarithromycin", strength: 500, perDay: 2,
+            start: new DateOnly(2023, 8, 30), end: new DateOnly(2023, 9, 6));
+        AddMedication(reupload, generic: "clarithromycin", strength: 500, perDay: 2,
+            start: new DateOnly(2023, 8, 30), end: new DateOnly(2023, 9, 6));
+
+        await _db.SaveChangesAsync();
+
+        Assert.DoesNotContain(await _checker.CheckAsync(_patientId),
+            a => a.Type == AlertType.DuplicatePrescription);
+    }
+
     /// <summary>The suppression must be by content, not by date — different files still count.</summary>
     [Fact]
     public async Task StillReportsDuplicateBetweenDifferentFilesOnTheSameDay()
@@ -259,7 +384,8 @@ public class RuleCheckerTests : IDisposable
 
     // ---- fixtures ----
 
-    private void AddDocument(Guid id, DateOnly date, string? sha256 = null) =>
+    private void AddDocument(Guid id, DateOnly? date, string? sha256 = null,
+        DocumentStatus status = DocumentStatus.Extracted) =>
         _db.Documents.Add(new Document
         {
             Id = id,
@@ -270,7 +396,7 @@ public class RuleCheckerTests : IDisposable
             // Distinct by default, so ordinary fixtures are treated as different files.
             Sha256 = sha256 ?? id.ToString("N") + id.ToString("N"),
             DocumentDate = date,
-            Status = DocumentStatus.Extracted
+            Status = status
         });
 
     private void AddMedication(Guid documentId, string generic, string? brand = null,
@@ -293,14 +419,20 @@ public class RuleCheckerTests : IDisposable
         });
     }
 
+    /// <summary>
+    /// Shaped as the merger writes it: the substance column names the substance, the printed
+    /// sentence is the evidence in SourceText.
+    /// </summary>
     private void AddWarning(Guid documentId, string text, List<string> relatesTo) =>
         _db.Allergies.Add(new Allergy
         {
             PatientId = _patientId,
             DocumentId = documentId,
             IsDocumentWarning = true,
-            Substance = text,
+            Substance = string.Join(", ", relatesTo),
+            SubstanceGeneric = relatesTo.Count == 1 ? relatesTo[0] : null,
             RelatesTo = relatesTo,
+            SourceText = text,
             Confidence = 85
         });
 

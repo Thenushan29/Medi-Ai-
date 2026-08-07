@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using MediTrail.Api.AiPipeline.Extraction;
 using MediTrail.Api.Contracts.Api;
 using MediTrail.Api.Data;
@@ -21,7 +22,7 @@ public interface IGroundedChatService
     Task<ChatAnswerDto> AskAsync(Guid patientId, string question, CancellationToken ct = default);
 }
 
-public sealed class GroundedChatService(
+public sealed partial class GroundedChatService(
     MediTrailDbContext db,
     IPromptLibrary prompts,
     IServiceProvider services,
@@ -58,7 +59,26 @@ public sealed class GroundedChatService(
                 ["QUESTION"] = question.Trim()
             });
 
-            var completion = await ai.CompleteAsync(prompt, question.Trim(), ct: ct);
+            // TEMPORARY DIAGNOSTIC — remove. Logs the exact prompt and the raw reply, verbatim,
+            // to find where a printed-warning question turns into "not found". Contains PHI: do
+            // not ship, and do not leave enabled outside a local investigation.
+            logger.LogWarning("=== CHAT PROMPT for {PatientId} ===\n{Prompt}\n=== END CHAT PROMPT ===",
+                patientId, prompt);
+
+            // The question is already inside the system prompt ({{QUESTION}}), surrounded by the
+            // intent-matching instructions. Passing it again as the bare user message lets the
+            // model answer the surface wording and skip those instructions — the pattern that
+            // made "allergy noted in my earlier report" refuse a same-document finding sitting
+            // in Findings. Sibling stages (cross-check, trends) pass a short fixed user turn for
+            // the same reason.
+            var completion = await ai.CompleteAsync(
+                prompt,
+                "Answer the question above as JSON. Prefer Findings over a not-found reply when they match the intent.",
+                ct: ct);
+
+            // TEMPORARY DIAGNOSTIC — remove.
+            logger.LogWarning("=== CHAT RAW RESPONSE for {PatientId} (model {Model}) ===\n{Content}\n=== END CHAT RAW RESPONSE ===",
+                patientId, completion.Model, completion.Content);
 
             if (!JsonResponseReader.TryRead<ChatResponse>(completion.Content, out var answer, out var error))
             {
@@ -111,12 +131,23 @@ public sealed class GroundedChatService(
             .Where(d => d.PatientId == patientId)
             .Include(d => d.Medications)
             .Include(d => d.LabResults)
-            .Include(d => d.Allergies)
             .OrderBy(d => d.DocumentDate == null)
             .ThenBy(d => d.DocumentDate)
             .ToListAsync(ct);
 
         if (documents.Count == 0) return string.Empty;
+
+        // Scoped by patient, the way the rule checks read the same table — not through each
+        // document's navigation. The two paths have to see the same rows, or chat can deny a
+        // finding the dashboard is showing on the very same record.
+        var allergies = await db.Allergies
+            .AsNoTracking()
+            .Where(a => a.PatientId == patientId)
+            .ToListAsync(ct);
+
+        var allergiesByDocument = allergies
+            .GroupBy(a => a.DocumentId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         var alerts = await db.Alerts
             .AsNoTracking()
@@ -150,41 +181,95 @@ public sealed class GroundedChatService(
                 builder.Append("- Medication: ").Append(m.GenericName ?? m.BrandName ?? "unnamed");
                 if (m.BrandName is not null && m.GenericName is not null) builder.Append($" (brand {m.BrandName})");
                 if (m.StrengthValue is not null) builder.Append($", {m.StrengthValue}{m.StrengthUnit}");
-                if (m.Frequency is not null) builder.Append($", {m.Frequency}");
+                if (m.Frequency is not null) builder.Append($", {OneLine(m.Frequency)}");
                 if (m.DurationDays is not null) builder.Append($", {m.DurationDays} days");
                 builder.AppendLine();
             }
 
             foreach (var l in document.LabResults)
             {
-                builder.Append("- Lab: ").Append(l.TestName ?? l.TestNameStandard);
-                builder.Append($" = {l.ValueNumeric?.ToString() ?? l.ValueText} {l.Unit}");
-                if (l.NormalRangeText is not null) builder.Append($" (normal {l.NormalRangeText})");
+                builder.Append("- Lab: ").Append(OneLine(l.TestName ?? l.TestNameStandard));
+                builder.Append($" = {l.ValueNumeric?.ToString() ?? OneLine(l.ValueText)} {l.Unit}");
+                if (l.NormalRangeText is not null) builder.Append($" (normal {OneLine(l.NormalRangeText)})");
                 if (l.IsOutOfRange) builder.Append(" [OUTSIDE RANGE]");
                 builder.AppendLine();
             }
 
-            foreach (var a in document.Allergies)
+            foreach (var a in AllergiesFor(allergiesByDocument, document.Id))
             {
-                builder.AppendLine(a.IsDocumentWarning
-                    ? $"- Warning printed on this document: \"{a.Substance}\" (concerns: {string.Join(", ", a.RelatesTo)})"
-                    : $"- Allergy: {a.Substance}{(a.Reaction is null ? "" : $" — {a.Reaction}")}");
+                builder.AppendLine(Describe(a));
             }
 
+            builder.AppendLine();
+        }
+
+        // A row whose document is not in the list above would otherwise be silently absent from the
+        // record while still driving a visible alert. There should be none — deleting a document
+        // cascades — but chat denying something the dashboard shows is the failure worth guarding.
+        var listed = documents.Select(d => d.Id).ToHashSet();
+        var unlinked = allergies.Where(a => !listed.Contains(a.DocumentId)).ToList();
+
+        if (unlinked.Count > 0)
+        {
+            builder.AppendLine("## Allergies and warnings whose document is not listed above");
+            foreach (var a in unlinked) builder.AppendLine(Describe(a));
             builder.AppendLine();
         }
 
         if (alerts.Count > 0)
         {
             builder.AppendLine("## Findings already raised by the system");
+            builder.AppendLine(
+                "These are confirmed findings about this person. They answer questions about " +
+                "allergies, earlier reports, prior notes, and drugs prescribed despite a warning — " +
+                "including when the warning is on the SAME document as the medicine. " +
+                "If a question's intent matches any finding below, answer from that finding and " +
+                "cite the documents listed on it. Do not say not-found.");
+
             foreach (var alert in alerts)
             {
-                builder.AppendLine($"- [{alert.Severity}] {alert.Title}: {alert.ExplanationEn}");
+                builder.Append($"- [{alert.Severity}] {alert.Title}: {OneLine(alert.ExplanationEn)}");
+
+                // Without the evidence ids an answer grounded on a finding cannot cite anything,
+                // and an uncitable answer is dropped to "not found" by the grounding check above
+                // (Principle 3).
+                if (alert.EvidenceDocumentIds.Count > 0)
+                {
+                    builder.Append($" (documents: {string.Join(", ", alert.EvidenceDocumentIds)})");
+                }
+
+                builder.AppendLine();
             }
         }
 
         return builder.ToString();
     }
+
+    private static List<Allergy> AllergiesFor(Dictionary<Guid, List<Allergy>> byDocument, Guid documentId) =>
+        byDocument.TryGetValue(documentId, out var rows) ? rows : [];
+
+    /// <summary>
+    /// One row, one line. A printed warning is named as the contraindication it is and leads with
+    /// the substances it concerns: the record is read by a model answering questions like "was I
+    /// given anything I should avoid?", and a warning filed only as prose was being passed over
+    /// (FR-5.5, FR-7.1).
+    /// </summary>
+    private static string Describe(Allergy allergy) => allergy.IsDocumentWarning
+        ? $"- Warning printed on this document — do not take {string.Join(", ", allergy.RelatesTo)}: " +
+          $"\"{OneLine(allergy.SourceText ?? allergy.Substance)}\""
+        : $"- Allergy recorded for this person — do not take {allergy.Substance}" +
+          (allergy.Reaction is null ? string.Empty : $" (reaction: {OneLine(allergy.Reaction)})");
+
+    /// <summary>
+    /// Collapses whitespace so one item stays on one line. Source text is transcribed from a
+    /// document and carries the page's line breaks; left in, they split an entry across lines and
+    /// the tail reads as a separate, malformed one.
+    /// </summary>
+    private static string? OneLine(string? value) =>
+        value is null ? null : Whitespace().Replace(value, " ").Trim();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
 
     private static ChatAnswerDto Unavailable(string message) => new()
     {

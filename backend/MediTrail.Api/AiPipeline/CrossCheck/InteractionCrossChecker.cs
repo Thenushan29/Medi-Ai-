@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization;
 using MediTrail.Api.AiPipeline.Extraction;
+using MediTrail.Api.AiPipeline.Normalization;
 using MediTrail.Api.AiPipeline.Verification;
 using MediTrail.Api.Data;
 using MediTrail.Api.Data.Entities;
@@ -90,6 +91,18 @@ public sealed class InteractionCrossChecker(
 
             if (Key(finding.GenericA) == Key(finding.GenericB)) continue;
 
+            // Temporal gate: two drugs the patient was never taking at the same time cannot
+            // interact. Deterministic, so the model cannot talk its way past it (Principle 2).
+            var concurrency = MedicationWindowCalculator.Compare(a, b);
+
+            if (concurrency == Concurrency.NotConcurrent)
+            {
+                logger.LogInformation(
+                    "Dropped interaction {A} + {B} for {PatientId}: prescriptions do not overlap in time",
+                    finding.GenericA, finding.GenericB, patientId);
+                continue;
+            }
+
             var verification = await VerifyAsync(Key(finding.GenericA), Key(finding.GenericB), ct);
 
             var severity = ParseSeverity(finding.Severity);
@@ -102,8 +115,10 @@ public sealed class InteractionCrossChecker(
                 Severity = severity,
                 Title = $"{Display(finding.GenericA)} and {Display(finding.GenericB)} may interact",
                 InvolvedGenerics = [Key(finding.GenericA), Key(finding.GenericB)],
-                ExplanationEn = finding.ExplanationEn,
-                ExplanationTa = finding.ExplanationTa,
+                ExplanationEn = WithCaveat(finding.ExplanationEn, concurrency,
+                    MedicationWindowCalculator.DateUnknownCaveatEn),
+                ExplanationTa = WithCaveat(finding.ExplanationTa, concurrency,
+                    MedicationWindowCalculator.DateUnknownCaveatTa),
                 SuggestedActionEn = finding.SuggestedActionEn,
                 SuggestedActionTa = finding.SuggestedActionTa,
                 Confidence = confidence,
@@ -121,6 +136,19 @@ public sealed class InteractionCrossChecker(
             alerts.Count, patientId);
 
         return alerts;
+    }
+
+    /// <summary>
+    /// Appends the "dates unknown" caveat when the pair only survived the gate because a document
+    /// had no readable date. An explanation the model did not write is left alone — half a
+    /// sentence about a medication risk is worse than none.
+    /// </summary>
+    private static string? WithCaveat(string? explanation, Concurrency concurrency, string caveat)
+    {
+        if (concurrency != Concurrency.DateUnknown) return explanation;
+        if (string.IsNullOrWhiteSpace(explanation)) return explanation;
+
+        return $"{explanation.TrimEnd()} {caveat}";
     }
 
     /// <summary>
@@ -193,18 +221,20 @@ public sealed class InteractionCrossChecker(
                 .Distinct()
                 .ToList();
 
-            var dates = items
-                .Where(m => m.StartDate is not null)
-                .Select(m => m.StartDate!.Value.ToString("yyyy-MM"))
+            // The active window, not just the prescribing month: the model is told which medicines
+            // could have been in use together, so it is less likely to propose a pair the temporal
+            // gate would only throw away.
+            var periods = items
+                .Select(MedicationWindowCalculator.Describe)
                 .Distinct()
-                .OrderBy(d => d)
+                .OrderBy(p => p)
                 .ToList();
 
             builder.Append("- ").Append(generic);
 
             if (items[0].BrandName is { } brand) builder.Append($" (as {brand})");
             if (strengths.Count > 0) builder.Append($", {string.Join(" / ", strengths)}");
-            if (dates.Count > 0) builder.Append($", prescribed {string.Join(", ", dates)}");
+            if (periods.Count > 0) builder.Append($", active {string.Join("; ", periods)}");
 
             builder.AppendLine();
         }

@@ -225,10 +225,15 @@ public sealed class ExtractionMerger(
                 PatientId = document.PatientId,
                 DocumentId = document.Id,
                 IsDocumentWarning = true,
-                Substance = Trim(source.Text),
+                // The substance column names the substance, not the sentence that mentions it.
+                // Storing the whole warning here duplicated SourceText and made the evidence
+                // viewer render a paragraph where a drug name belongs.
+                Substance = string.Join(", ", generics),
                 SubstanceGeneric = generics.Count == 1 ? generics[0] : null,
                 RelatesTo = generics,
-                SourceText = Trim(source.SourceText),
+                // The sentence is the evidence (FR-4.6), so it falls back to the printed text
+                // rather than being lost when the model omits a separate sourceText.
+                SourceText = Trim(source.SourceText) ?? Trim(source.Text),
                 Confidence = source.Confidence
             });
         }
