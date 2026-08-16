@@ -80,8 +80,10 @@ public sealed class InteractionCrossChecker(
 
             // Grounding: the model may only name medications that are actually in the record
             // (§11.5). Anything else is dropped, not repaired.
-            if (!byGeneric.TryGetValue(Key(finding.GenericA), out var a) ||
-                !byGeneric.TryGetValue(Key(finding.GenericB), out var b))
+            var groundedA = Grounded(byGeneric, finding.GenericA);
+            var groundedB = Grounded(byGeneric, finding.GenericB);
+
+            if (groundedA.Count == 0 || groundedB.Count == 0)
             {
                 // Debug, not Warning: the drug names are this patient's medication history, and
                 // a level that reaches production logs would put them there on every analysis.
@@ -91,7 +93,17 @@ public sealed class InteractionCrossChecker(
                 continue;
             }
 
-            if (Key(finding.GenericA) == Key(finding.GenericB)) continue;
+            // Both sides landing on the same rows is one product, not two drugs: a model naming
+            // aspirin and codeine separately is describing a single combination tablet, and
+            // "Aspirin and Codeine may interact" about one tablet is not a finding. This also
+            // covers the case where the model names the identical generic twice.
+            if (groundedA.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(groundedB.Keys))
+            {
+                continue;
+            }
+
+            var a = groundedA.Values.SelectMany(rows => rows).ToList();
+            var b = groundedB.Values.SelectMany(rows => rows).ToList();
 
             // Temporal gate: two drugs the patient was never taking at the same time cannot
             // interact. Deterministic, so the model cannot talk its way past it (Principle 2).
@@ -116,7 +128,11 @@ public sealed class InteractionCrossChecker(
                 Type = AlertType.DrugInteraction,
                 Severity = severity,
                 Title = $"{Display(finding.GenericA)} and {Display(finding.GenericB)} may interact",
-                InvolvedGenerics = [Key(finding.GenericA), Key(finding.GenericB)],
+                // The generics as they sit on the record, not as the model named them. When the
+                // patient's row is a combination product this names the product, which is what
+                // the medications table and the evidence viewer key off — and it tells the reader
+                // which item on their own record carries the drug the title is about.
+                InvolvedGenerics = [.. groundedA.Keys.Concat(groundedB.Keys).Distinct()],
                 ExplanationEn = WithCaveat(finding.ExplanationEn, concurrency,
                     MedicationWindowCalculator.DateUnknownCaveatEn),
                 ExplanationTa = WithCaveat(finding.ExplanationTa, concurrency,
@@ -243,6 +259,25 @@ public sealed class InteractionCrossChecker(
 
         return builder.ToString();
     }
+
+    /// <summary>
+    /// The medication rows a proposed generic is grounded in, keyed by the generic as it sits on
+    /// the record.
+    ///
+    /// Matching is component-wise rather than whole-string, so a combination product on the record
+    /// satisfies a lookup for any one of its ingredients. On the evaluation set the model proposed
+    /// warfarin + aspirin, the record held <c>aspirin/codeine</c>, the exact-key lookup missed, and
+    /// the strongest interaction in the dataset was dropped in silence (traps.md X1).
+    ///
+    /// It holds in the other direction too: a model naming the combination is grounded by a record
+    /// holding the single ingredient. An empty result still means ungrounded, and ungrounded
+    /// findings are still dropped — this widens what counts as present, not what counts as true.
+    /// </summary>
+    private static Dictionary<string, List<Medication>> Grounded(
+        Dictionary<string, List<Medication>> byGeneric, string proposed) =>
+        byGeneric
+            .Where(entry => DrugNameNormalizer.SharesComponent(entry.Key, proposed))
+            .ToDictionary(entry => entry.Key, entry => entry.Value);
 
     private static string Key(string name) => name.Trim().ToLowerInvariant();
 

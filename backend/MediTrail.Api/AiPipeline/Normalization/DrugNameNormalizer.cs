@@ -225,6 +225,46 @@ public static partial class DrugNameNormalizer
         return left is not null && right is not null && left == right;
     }
 
+    /// <summary>
+    /// The active ingredients in a generic name.
+    ///
+    /// A combination product is stored as one slash-separated generic — <c>aspirin/codeine</c>,
+    /// <c>ibuprofen/paracetamol</c>, <c>amoxicillin/clavulanic acid</c>. Every check that looks a
+    /// drug up by whole-string equality is therefore blind to the ingredients inside one, which is
+    /// how a proposed warfarin + aspirin finding was dropped as ungrounded (traps.md X1).
+    ///
+    /// Each part goes through <see cref="Normalize"/>, so a combination written with a synonym
+    /// still resolves: <c>acetaminophen/codeine</c> yields paracetamol.
+    /// </summary>
+    public static IReadOnlyList<string> Components(string? generic)
+    {
+        if (string.IsNullOrWhiteSpace(generic)) return [];
+
+        return
+        [
+            .. generic
+                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(Normalize)
+                .Where(part => part is not null)
+                .Select(part => part!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+        ];
+    }
+
+    /// <summary>
+    /// True when two generic names share an active ingredient, whether or not either side is a
+    /// combination product. <see cref="AreSameDrug"/> is the stricter test — the same whole name —
+    /// and stays the right one for duplicate detection, where two different products that happen
+    /// to share an ingredient are not the same prescription.
+    /// </summary>
+    public static bool SharesComponent(string? a, string? b)
+    {
+        var left = Components(a);
+        if (left.Count == 0) return false;
+
+        return Components(b).Any(part => left.Contains(part, StringComparer.OrdinalIgnoreCase));
+    }
+
     [GeneratedRegex(@"^(demo|sample|test|dummy|xyz|abc)\b.*|^medicine\s*\d+$|^drug\s*\d+$",
         RegexOptions.IgnoreCase)]
     private static partial Regex Placeholder();

@@ -170,6 +170,58 @@ public class InteractionCrossCheckerTests : IDisposable
         new(_db, _ai, new FakePromptLibrary(), new FakeOpenFdaClient(),
             NullLogger<InteractionCrossChecker>.Instance);
 
+    /// <summary>
+    /// traps.md X1, in the shape the pipeline actually produced it.
+    ///
+    /// `patient_x_year3_2` prints "CAP. ASPIRIN AND CODEINE", which merges as the combination
+    /// generic `aspirin/codeine`. The model proposed warfarin + aspirin — the strongest and
+    /// best-documented interaction in the dataset — and the grounding lookup, being whole-string,
+    /// found no `aspirin` key and dropped it. The only trace was a Debug line.
+    /// </summary>
+    [Fact]
+    public async Task GroundsAnInteractionNamingOneIngredientOfACombinationProduct()
+    {
+        _ai.GenericA = "warfarin";
+        _ai.GenericB = "aspirin";
+
+        var document = AddDocument(new DateOnly(2019, 8, 5));
+
+        AddMedication(document, "warfarin", new DateOnly(2019, 8, 5), durationDays: 5);
+        AddMedication(document, "aspirin/codeine", new DateOnly(2019, 8, 5), durationDays: 5);
+
+        await _db.SaveChangesAsync();
+
+        var alert = Assert.Single(await Checker().CheckAsync(_patientId));
+
+        Assert.Equal(AlertType.DrugInteraction, alert.Type);
+
+        // Named as the record holds it, so the medications table and the evidence viewer can find
+        // the row, and the reader can see which product on their own list carries the aspirin.
+        Assert.Equal(["aspirin/codeine", "warfarin"], alert.InvolvedGenerics.Order());
+        Assert.Contains(document, alert.EvidenceDocumentIds);
+    }
+
+    /// <summary>
+    /// The other half of component matching: naming two ingredients of one tablet describes one
+    /// product, not two drugs, and "Aspirin and Codeine may interact" about a single tablet would
+    /// be a finding invented by the widened lookup rather than found by it.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotRaiseAnInteractionBetweenTwoIngredientsOfTheSameProduct()
+    {
+        _ai.GenericA = "aspirin";
+        _ai.GenericB = "codeine";
+
+        var document = AddDocument(new DateOnly(2019, 8, 5));
+
+        AddMedication(document, "aspirin/codeine", new DateOnly(2019, 8, 5), durationDays: 5);
+        AddMedication(document, "warfarin", new DateOnly(2019, 8, 5), durationDays: 5);
+
+        await _db.SaveChangesAsync();
+
+        Assert.Empty(await Checker().CheckAsync(_patientId));
+    }
+
     private Guid AddDocument(DateOnly? date)
     {
         var id = Guid.NewGuid();
@@ -206,10 +258,18 @@ public class InteractionCrossCheckerTests : IDisposable
             Confidence = 90
         });
 
-    /// <summary>Always proposes the one interaction, so only the gate decides the outcome.</summary>
+    /// <summary>
+    /// Always proposes the one interaction, so only the pipeline decides the outcome. The pair is
+    /// settable because grounding is what some of these tests are about: the model naming a drug
+    /// the record holds only inside a combination product is the whole of traps.md X1.
+    /// </summary>
     private sealed class FakeAiClient : IAiClient
     {
         public string LastPrompt { get; private set; } = string.Empty;
+
+        public string GenericA { get; set; } = "atenolol";
+        public string GenericB { get; set; } = "methylphenidate";
+        public string Severity { get; set; } = "amber";
 
         public Task<AiCompletion> CompleteAsync(
             string systemPrompt, string userMessage, string? model = null, CancellationToken ct = default)
@@ -218,13 +278,13 @@ public class InteractionCrossCheckerTests : IDisposable
 
             return Task.FromResult(new AiCompletion
             {
-                Content = """
+                Content = $$"""
                 {
                   "findings": [
                     {
-                      "genericA": "atenolol",
-                      "genericB": "methylphenidate",
-                      "severity": "amber",
+                      "genericA": "{{GenericA}}",
+                      "genericB": "{{GenericB}}",
+                      "severity": "{{Severity}}",
                       "explanationEn": "These two can pull your heart rate in opposite directions.",
                       "explanationTa": "இவை இரண்டும் இதயத் துடிப்பை எதிரெதிர் திசையில் மாற்றக்கூடும்.",
                       "suggestedActionEn": "Ask your pharmacist whether both are still needed.",
