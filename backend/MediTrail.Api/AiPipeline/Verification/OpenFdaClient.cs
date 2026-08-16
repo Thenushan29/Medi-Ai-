@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MediTrail.Api.AiPipeline.Normalization;
 using MediTrail.Api.Configuration;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
@@ -69,20 +70,27 @@ public sealed class OpenFdaClient(
 
         // Matching on the other drug's name inside the label's own interaction text. A hit is
         // real corroboration; a miss only means this label does not mention it.
-        var needle = interactsWith.Trim();
+        //
+        // Searched by ingredient: a label lists "aspirin", never "aspirin/codeine", so looking for
+        // the joined string of a combination product would miss a mention that is plainly there.
+        var needles = DrugNameNormalizer.Components(interactsWith);
+        if (needles.Count == 0) needles = [interactsWith.Trim()];
 
         foreach (var section in label.Sections)
         {
-            var index = section.Value.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
-            if (index < 0) continue;
-
-            return new FdaVerification
+            foreach (var needle in needles)
             {
-                Confirmed = true,
-                Excerpt = Excerpt(section.Value, index),
-                Source = $"FDA drug label ({section.Key.Replace('_', ' ')}) — openFDA",
-                LookupFailed = false
-            };
+                var index = section.Value.IndexOf(needle, StringComparison.OrdinalIgnoreCase);
+                if (index < 0) continue;
+
+                return new FdaVerification
+                {
+                    Confirmed = true,
+                    Excerpt = Excerpt(section.Value, index),
+                    Source = $"FDA drug label ({section.Key.Replace('_', ' ')}) — openFDA",
+                    LookupFailed = false
+                };
+            }
         }
 
         return FdaVerification.NotConfirmed();
@@ -109,6 +117,11 @@ public sealed class OpenFdaClient(
         {
             var query = $"openfda.generic_name:\"{Uri.EscapeDataString(genericName)}\"";
             var url = $"/drug/label.json?search={query}&limit=1";
+
+            // Logged before the key is appended, and only at Debug: the request names a drug the
+            // patient is taking, and the key must never reach a log at any level.
+            logger.LogDebug("openFDA GET {BaseAddress}{Url} for {Generic}",
+                http.BaseAddress, url.TrimStart('/'), genericName);
 
             if (!string.IsNullOrWhiteSpace(_options.ApiKey))
             {
