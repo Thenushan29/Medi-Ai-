@@ -222,6 +222,36 @@ public class InteractionCrossCheckerTests : IDisposable
         Assert.Empty(await Checker().CheckAsync(_patientId));
     }
 
+    /// <summary>
+    /// FR-7.6 and §11.4: any high-risk or low-confidence output carries the consult banner. On the
+    /// evaluation run every interaction the model raised came back amber, at confidence 65 to 85,
+    /// and not one of them was flagged — only the deterministic red findings ever were.
+    ///
+    /// Informational findings stay unflagged, so the banner still means something by the time a
+    /// red one appears.
+    /// </summary>
+    [Theory]
+    [InlineData("red", true)]
+    [InlineData("amber", true)]
+    [InlineData("info", false)]
+    public async Task FlagsAnyInteractionAboveTheInformationalTierForConsultation(
+        string severity, bool expected)
+    {
+        _ai.Severity = severity;
+
+        var first = AddDocument(new DateOnly(2023, 4, 2));
+        var second = AddDocument(new DateOnly(2023, 4, 10));
+
+        AddMedication(first, "atenolol", new DateOnly(2023, 4, 2), durationDays: 15);
+        AddMedication(second, "methylphenidate", new DateOnly(2023, 4, 10), durationDays: 24);
+
+        await _db.SaveChangesAsync();
+
+        var alert = Assert.Single(await Checker().CheckAsync(_patientId));
+
+        Assert.Equal(expected, alert.RequiresProfessionalConsult);
+    }
+
     private Guid AddDocument(DateOnly? date)
     {
         var id = Guid.NewGuid();

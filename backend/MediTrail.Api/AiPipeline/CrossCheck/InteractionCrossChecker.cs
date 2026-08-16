@@ -140,8 +140,16 @@ public sealed class InteractionCrossChecker(
                 SuggestedActionEn = finding.SuggestedActionEn,
                 SuggestedActionTa = finding.SuggestedActionTa,
                 Confidence = confidence,
-                // Red severity or low confidence always carries the consult banner (§11.4).
-                RequiresProfessionalConsult = severity == AlertSeverity.Red || confidence < 50,
+                // Every interaction above the informational tier carries the consult banner, not
+                // only the red ones. The rules require flagging any high-risk *or* low-confidence
+                // output (FR-7.6, §11.4), and an amber interaction is a claim that two medicines
+                // the patient is taking together may harm them — there is no reading of that which
+                // the patient should act on alone. Measured on the evaluation set, every one of
+                // sixteen interaction alerts came back amber and none carried the banner.
+                //
+                // Info stays unflagged unless the confidence is poor: a banner on every minor
+                // finding is a banner nobody reads by the time a red one appears.
+                RequiresProfessionalConsult = severity != AlertSeverity.Info || confidence < 50,
                 VerificationStatus = verification.Status,
                 VerificationExcerpt = verification.Excerpt,
                 VerificationSource = verification.Source,
