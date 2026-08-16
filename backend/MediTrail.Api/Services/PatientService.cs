@@ -53,6 +53,7 @@ public sealed class PatientService(
                 DocumentCount = p.Documents.Count,
                 RedAlertCount = p.Alerts.Count(a => a.Severity == AlertSeverity.Red),
                 AmberAlertCount = p.Alerts.Count(a => a.Severity == AlertSeverity.Amber),
+                InfoAlertCount = p.Alerts.Count(a => a.Severity == AlertSeverity.Info),
                 UpdatedAt = p.UpdatedAt,
                 AnalyzedAt = p.AnalyzedAt
             })

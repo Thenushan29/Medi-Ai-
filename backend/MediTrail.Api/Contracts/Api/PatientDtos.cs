@@ -22,6 +22,11 @@ public sealed record PatientSummaryDto
     public required int DocumentCount { get; init; }
     public required int RedAlertCount { get; init; }
     public required int AmberAlertCount { get; init; }
+    /// <summary>
+    /// Carried so the card can account for every finding. A patient whose only findings are
+    /// informational otherwise shows no chip at all, which reads as "nothing was found".
+    /// </summary>
+    public required int InfoAlertCount { get; init; }
     public required DateTimeOffset UpdatedAt { get; init; }
     public DateTimeOffset? AnalyzedAt { get; init; }
 }

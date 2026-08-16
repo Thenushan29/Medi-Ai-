@@ -42,6 +42,7 @@ export interface PatientSummary {
   documentCount: number;
   redAlertCount: number;
   amberAlertCount: number;
+  infoAlertCount: number;
   updatedAt: string;
   analyzedAt?: string;
 }

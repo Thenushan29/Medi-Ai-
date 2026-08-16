@@ -65,6 +65,14 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
                 ! {{ p.amberAlertCount }} to check
               </span>
             }
+            <!-- The info tier gets its own chip rather than being folded into "to check" or left
+                 out. Without it the header under-counts the Alerts tab, which lists every
+                 severity — a header that disagrees with the tab beside it reads as a miscount. -->
+            @if (p.infoAlertCount > 0) {
+              <span class="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-800">
+                i {{ p.infoAlertCount }} for information
+              </span>
+            }
             @if (p.failedDocumentCount > 0) {
               <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
                 {{ p.failedDocumentCount }} unreadable
