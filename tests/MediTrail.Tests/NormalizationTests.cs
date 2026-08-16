@@ -32,6 +32,33 @@ public class DrugNameNormalizerTests
         Assert.Equal("beta blocker", DrugNameNormalizer.ClassOf(DrugNameNormalizer.GenericForBrand("Betaloc")));
 
     [Theory]
+    // A combination product is one slash-separated generic, so every whole-string lookup is blind
+    // to what is inside it — how warfarin + aspirin was dropped as ungrounded (traps.md X1).
+    [InlineData("aspirin/codeine", "aspirin", true)]
+    [InlineData("aspirin", "aspirin/codeine", true)]
+    [InlineData("ibuprofen/paracetamol", "acetaminophen", true)]   // via the synonym table
+    [InlineData("aspirin/codeine", "warfarin", false)]
+    [InlineData("aspirin/codeine", null, false)]
+    [InlineData(null, "aspirin", false)]
+    public void SharesComponentSeesInsideACombinationProduct(string? a, string? b, bool expected) =>
+        Assert.Equal(expected, DrugNameNormalizer.SharesComponent(a, b));
+
+    [Fact]
+    public void AreSameDrugStaysStricterThanSharesComponent() =>
+        // Duplicate detection asks whether this is the same prescription written twice, and two
+        // products sharing one ingredient are not. The overlap between them is the class check's
+        // finding, worded as such.
+        Assert.False(DrugNameNormalizer.AreSameDrug("aspirin/codeine", "aspirin"));
+
+    [Theory]
+    [InlineData("aspirin/codeine", "nsaid")]
+    [InlineData("ibuprofen/paracetamol", "nsaid")]
+    [InlineData("amoxicillin/clavulanic acid", "penicillin")]
+    [InlineData("doxylamine/pyridoxine/folic acid", null)]   // no ingredient is in the table
+    public void CombinationProductTakesItsIngredientsClass(string generic, string? expected) =>
+        Assert.Equal(expected, DrugNameNormalizer.ClassOf(generic));
+
+    [Theory]
     // The equivalence the whole evaluation dataset turns on (traps.md Y1).
     [InlineData("Paracetamol", "acetaminophen")]
     [InlineData("PARACETAMOL", "Acetaminophen")]

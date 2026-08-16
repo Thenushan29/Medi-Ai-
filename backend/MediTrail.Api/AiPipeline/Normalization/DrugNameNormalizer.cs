@@ -210,11 +210,31 @@ public static partial class DrugNameNormalizer
         return Brands.TryGetValue(cleaned, out var generic) ? generic : null;
     }
 
-    /// <summary>Therapeutic class, or null when the drug is not in the table.</summary>
+    /// <summary>
+    /// Therapeutic class, or null when the drug is not in the table.
+    ///
+    /// A combination product takes the class of whichever ingredient has one, so
+    /// <c>ibuprofen/paracetamol</c> is an NSAID and <c>aspirin/codeine</c> is one too. Without
+    /// this the whole string misses the table and the product joins no class cluster — which is
+    /// how two products that both contain aspirin avoid the duplicate-therapy check entirely.
+    /// </summary>
     public static string? ClassOf(string? genericName)
     {
         var normalized = Normalize(genericName);
-        return normalized is not null && TherapeuticClasses.TryGetValue(normalized, out var cls) ? cls : null;
+
+        if (normalized is not null && TherapeuticClasses.TryGetValue(normalized, out var exact))
+        {
+            return exact;
+        }
+
+        // First listed ingredient with a known class wins. Combination products name their
+        // principal ingredient first, and a product cannot be filed under two classes at once.
+        foreach (var component in Components(genericName))
+        {
+            if (TherapeuticClasses.TryGetValue(component, out var cls)) return cls;
+        }
+
+        return null;
     }
 
     /// <summary>True when two names denote the same molecule.</summary>

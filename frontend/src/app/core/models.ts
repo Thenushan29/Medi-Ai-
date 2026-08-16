@@ -193,7 +193,9 @@ export type AlertType =
   | 'DocumentWarningConflict'
   | 'LabOutOfRange'
   | 'LabDrift'
-  | 'LowExtractionConfidence';
+  | 'LowExtractionConfidence'
+  /** A medication whose active ingredient could not be resolved, so no cross-check covered it. */
+  | 'UnresolvedMedication';
 
 export interface EvidenceRef {
   documentId: string;
