@@ -59,12 +59,6 @@ public sealed partial class GroundedChatService(
                 ["QUESTION"] = question.Trim()
             });
 
-            // TEMPORARY DIAGNOSTIC — remove. Logs the exact prompt and the raw reply, verbatim,
-            // to find where a printed-warning question turns into "not found". Contains PHI: do
-            // not ship, and do not leave enabled outside a local investigation.
-            logger.LogWarning("=== CHAT PROMPT for {PatientId} ===\n{Prompt}\n=== END CHAT PROMPT ===",
-                patientId, prompt);
-
             // The question is already inside the system prompt ({{QUESTION}}), surrounded by the
             // intent-matching instructions. Passing it again as the bare user message lets the
             // model answer the surface wording and skip those instructions — the pattern that
@@ -75,10 +69,6 @@ public sealed partial class GroundedChatService(
                 prompt,
                 "Answer the question above as JSON. Prefer Findings over a not-found reply when they match the intent.",
                 ct: ct);
-
-            // TEMPORARY DIAGNOSTIC — remove.
-            logger.LogWarning("=== CHAT RAW RESPONSE for {PatientId} (model {Model}) ===\n{Content}\n=== END CHAT RAW RESPONSE ===",
-                patientId, completion.Model, completion.Content);
 
             if (!JsonResponseReader.TryRead<ChatResponse>(completion.Content, out var answer, out var error))
             {

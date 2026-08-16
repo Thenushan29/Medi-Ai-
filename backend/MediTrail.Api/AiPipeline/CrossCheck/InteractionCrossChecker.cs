@@ -83,7 +83,9 @@ public sealed class InteractionCrossChecker(
             if (!byGeneric.TryGetValue(Key(finding.GenericA), out var a) ||
                 !byGeneric.TryGetValue(Key(finding.GenericB), out var b))
             {
-                logger.LogWarning(
+                // Debug, not Warning: the drug names are this patient's medication history, and
+                // a level that reaches production logs would put them there on every analysis.
+                logger.LogDebug(
                     "Dropped interaction {A} + {B} for {PatientId}: not in the patient's record",
                     finding.GenericA, finding.GenericB, patientId);
                 continue;
@@ -97,7 +99,7 @@ public sealed class InteractionCrossChecker(
 
             if (concurrency == Concurrency.NotConcurrent)
             {
-                logger.LogInformation(
+                logger.LogDebug(
                     "Dropped interaction {A} + {B} for {PatientId}: prescriptions do not overlap in time",
                     finding.GenericA, finding.GenericB, patientId);
                 continue;

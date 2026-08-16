@@ -114,12 +114,16 @@ public sealed class TrendAnalyzer(
                 return explanation;
             }
 
-            logger.LogWarning("Trend explanation unusable for {Test}: {Error}", series.TestKey, error);
+            // The parser's complaint says nothing about the patient; the test being explained is
+            // clinical content, so naming it is kept to Debug.
+            logger.LogWarning("Trend explanation unusable: {Error}", error);
+            logger.LogDebug("Trend explanation unusable for {Test}: {Error}", series.TestKey, error);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // A missing sentence must not cost the user the chart (§14.4).
-            logger.LogWarning(ex, "Trend explanation unavailable for {Test}", series.TestKey);
+            logger.LogWarning(ex, "Trend explanation unavailable");
+            logger.LogDebug(ex, "Trend explanation unavailable for {Test}", series.TestKey);
         }
 
         return null;

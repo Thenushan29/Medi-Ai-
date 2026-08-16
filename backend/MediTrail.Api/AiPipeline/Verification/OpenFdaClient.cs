@@ -128,7 +128,10 @@ public sealed class OpenFdaClient(
 
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("openFDA returned {Status} for {Generic}",
+                // The status is the operational signal and carries nothing about the patient.
+                // The drug being looked up is medication data, so it stays at Debug.
+                logger.LogWarning("openFDA label lookup returned {Status}", (int)response.StatusCode);
+                logger.LogDebug("openFDA returned {Status} for {Generic}",
                     (int)response.StatusCode, genericName);
                 return null;
             }
@@ -156,7 +159,8 @@ public sealed class OpenFdaClient(
         catch (Exception ex)
         {
             // Never a hard dependency (§14.4). The caller marks the finding unverified and moves on.
-            logger.LogWarning(ex, "openFDA lookup failed for {Generic}", genericName);
+            logger.LogWarning(ex, "openFDA lookup failed");
+            logger.LogDebug(ex, "openFDA lookup failed for {Generic}", genericName);
             return null;
         }
     }
