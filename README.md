@@ -146,8 +146,10 @@ on failure. A filtered run reports the traps it could not reach as SKIP; a skip 
 dropped live there rather than at Information, because they name the patient's medications and must
 not reach production logs.
 
-The current results, and the two traps that do **not** fire, are recorded in the Detection status
-table in [dataset/golden/traps.md](dataset/golden/traps.md).
+The current results are recorded in the Detection status table in
+[dataset/golden/traps.md](dataset/golden/traps.md) — all seven originally-planted traps now fire;
+the all-document date sweep still catches one invented date (`patient_y_year1_1`), an open
+extraction-prompt issue.
 
 ---
 
@@ -156,14 +158,14 @@ table in [dataset/golden/traps.md](dataset/golden/traps.md).
 | Milestone | State |
 |---|---|
 | **M1 — Foundation** | Done. Repo, both apps, schema, storage, upload persisting files and rows. Verified end to end against Supabase. |
-| **M2 — Extraction proven** | Pipeline built: prompt, OpenRouter vision client, schema validation with one stricter retry, golden-dataset accuracy runner. **Not yet proven** — needs the dataset images and a measured accuracy figure. |
-| M3 — Intelligence complete | Not started. Normalize/merge, rule checks, cross-check, openFDA, trends. |
-| M4 — Application complete | Timeline and evidence viewer done; medications, lab trends, alerts and chat pending M3. |
-| M5 — Deployed | Not started. |
+| **M2 — Extraction proven** | Done, with one open defect. The trap harness runs all 16 dataset images through the real extraction path on the demo model; the accuracy figure for the technical summary comes from the golden runner. Open: `patient_y_year1_1` gets an invented `documentDate` on a handwritten script (the harness's DATES check fails on it) — a prompt fix pending re-measurement per §18.4. |
+| **M3 — Intelligence complete** | Done for the medication path: merge, deterministic rule checks, LLM cross-check with component-wise grounding, openFDA verification (first `Confirmed` result: warfarin + aspirin), unresolved-medication flagging. All seven planted traps detected end to end (§18.2). Lab **trends** are built but undemonstrable on the judge dataset — it contains no longitudinal lab series (see traps.md). |
+| **M4 — Application complete** | Done. All dashboard views, evidence viewer with per-finding citation marking, processing screen, chat drawer. |
+| **M5 — Deployed** | Backend on Azure App Service, frontend served from the API's wwwroot; Supabase storage hardened and keepalive in place. Cold-path testing from an external network (§18.5) not yet performed. |
 | M6 — Submitted | Not started. |
 
-**M2 gates everything** (§23): no downstream stage is built on unmeasured extraction quality.
-The golden-dataset test against hand-labelled ground truth is the primary quality gate (§18.1).
+The golden-dataset accuracy test (§18.1) and the trap harness (§18.2) are the two quality gates;
+both exit non-zero on failure and both must be green on the demo model before submission.
 
 ---
 
