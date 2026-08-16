@@ -4,13 +4,19 @@ import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
 import { ConfidenceBadgeComponent } from '../../shared/confidence-badge.component';
-import type { DocumentDetail } from '../../core/models';
+import type { Alert, Allergy, DocumentDetail, Medication } from '../../core/models';
 
 /**
  * Evidence viewer (§10.9). Split view: the source document on one side, what was read from it on
  * the other, with the original printed text shown beside every normalized value.
  *
  * This is the screen that answers "how do you know the AI didn't make this up?" (§4.4).
+ *
+ * Arriving from an alert, the `alert` query parameter names the finding, and the rows that finding
+ * rests on are marked in the extracted-data pane. **Nothing is drawn on the image.** Extraction
+ * records the printed text an item was read from, not its position on the page — there are no
+ * bounding boxes anywhere in the pipeline, and §26 puts word-level coordinates in the post-Round-1
+ * OCR work. A box positioned by guesswork would be the one thing this screen exists to rule out.
  */
 @Component({
   selector: 'mt-evidence-page',
@@ -22,6 +28,39 @@ import type { DocumentDetail } from '../../core/models';
         <a [routerLink]="['/patients', d.patientId]" class="text-xs text-brand-700 hover:underline">
           ← Back to timeline
         </a>
+
+        @if (citedAlert(); as alert) {
+          <div
+            class="mt-4 rounded-xl border px-5 py-4"
+            [class]="
+              alert.severity === 'Red'
+                ? 'border-red-200 bg-red-50'
+                : alert.severity === 'Amber'
+                  ? 'border-amber-200 bg-amber-50'
+                  : 'border-slate-200 bg-slate-50'
+            "
+          >
+            <p class="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Showing evidence for
+            </p>
+            <p class="mt-1 text-sm font-semibold text-slate-900">{{ alert.title }}</p>
+
+            @if (alert.explanationEn) {
+              <p class="mt-1 text-xs text-slate-700">{{ alert.explanationEn }}</p>
+            }
+
+            <p class="mt-3 text-xs text-slate-500">
+              @if (citedCount() > 0) {
+                {{ citedCount() }} item{{ citedCount() === 1 ? '' : 's' }} read from this document
+                {{ citedCount() === 1 ? 'is' : 'are' }} marked below.
+              } @else {
+                This finding cites the document as a whole rather than a single line on it.
+              }
+              The image itself is not marked up — MediTrail records the text an item was read from,
+              not where it sits on the page.
+            </p>
+          </div>
+        }
 
         <div class="mt-4 grid gap-6 lg:grid-cols-2">
           <!-- Source -->
@@ -78,7 +117,10 @@ import type { DocumentDetail } from '../../core/models';
                 </h2>
                 <ul class="divide-y divide-slate-100">
                   @for (m of d.medications; track m.id) {
-                    <li class="px-5 py-4">
+                    <li class="px-5 py-4" [class]="citesMedication(m) ? 'bg-brand-50/70 border-l-4 border-brand-500' : ''">
+                      @if (citesMedication(m)) {
+                        <p class="mb-1 text-xs font-medium text-brand-700">Cited by this finding</p>
+                      }
                       <div class="flex items-start justify-between gap-4">
                         <p class="text-sm font-medium text-slate-900">
                           {{ m.brandName || m.genericName || 'Unnamed medication' }}
@@ -153,7 +195,10 @@ import type { DocumentDetail } from '../../core/models';
                 </h2>
                 <ul class="divide-y divide-slate-100">
                   @for (a of d.allergies; track a.id) {
-                    <li class="px-5 py-4">
+                    <li class="px-5 py-4" [class]="citesAllergy(a) ? 'bg-brand-50/70 border-l-4 border-brand-500' : ''">
+                      @if (citesAllergy(a)) {
+                        <p class="mb-1 text-xs font-medium text-brand-700">Cited by this finding</p>
+                      }
                       <div class="flex items-start justify-between gap-4">
                         <p class="text-sm text-slate-900">
                           <!-- A warning reads as the sentence printed on the document; its
@@ -204,15 +249,77 @@ export class EvidencePageComponent {
 
   readonly documentId = input.required<string>();
 
+  /** Query parameter, bound by withComponentInputBinding. Absent when opened from the timeline. */
+  readonly alert = input<string>();
+
   protected readonly document = signal<DocumentDetail | null>(null);
+  protected readonly citedAlert = signal<Alert | null>(null);
   protected readonly error = signal<string | null>(null);
 
   constructor() {
     queueMicrotask(() =>
       this.api.getDocument(this.documentId()).subscribe({
-        next: doc => this.document.set(doc),
+        next: doc => {
+          this.document.set(doc);
+          this.loadAlert(doc.patientId);
+        },
         error: (err: Error) => this.error.set(err.message)
       })
     );
   }
+
+  /**
+   * A missing alert is not an error worth showing. The document is the point of this screen; the
+   * finding is context on top of it, and losing the context must not lose the evidence.
+   */
+  private loadAlert(patientId: string): void {
+    const id = this.alert();
+    if (!id) return;
+
+    this.api.getAlerts(patientId).subscribe({
+      next: alerts => this.citedAlert.set(alerts.find(a => a.id === id) ?? null),
+      error: () => this.citedAlert.set(null)
+    });
+  }
+
+  protected citesMedication(medication: Medication): boolean {
+    return this.cites(medication.genericName);
+  }
+
+  protected citesAllergy(allergy: Allergy): boolean {
+    return allergy.relatesTo.some(substance => this.cites(substance));
+  }
+
+  protected citedCount(): number {
+    const d = this.document();
+    if (!d || !this.citedAlert()) return 0;
+
+    return (
+      d.medications.filter(m => this.citesMedication(m)).length +
+      d.allergies.filter(a => this.citesAllergy(a)).length
+    );
+  }
+
+  /**
+   * Matched component-wise, not by whole string: a combination product is stored as one
+   * slash-separated generic ("aspirin/codeine"), and an alert about aspirin names only the
+   * component. Whole-string equality would leave the row that caused the finding unmarked.
+   */
+  private cites(generic: string | undefined): boolean {
+    const alert = this.citedAlert();
+    if (!alert || !generic) return false;
+
+    const parts = components(generic);
+    return alert.involvedGenerics.some(involved =>
+      components(involved).some(part => parts.includes(part))
+    );
+  }
+}
+
+function components(generic: string): string[] {
+  return generic
+    .toLowerCase()
+    .split('/')
+    .map(part => part.trim())
+    .filter(part => part.length > 0);
 }

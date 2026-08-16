@@ -87,8 +87,12 @@ import type { Alert, AlertSeverity, VerificationStatus } from '../../core/models
               <div class="flex flex-wrap gap-2 border-t border-slate-100 px-5 py-3">
                 <span class="text-xs text-slate-500">Evidence:</span>
                 @for (evidence of alert.evidence; track evidence.documentId) {
+                  <!-- The alert id travels with the link so the evidence viewer can say which
+                       finding sent the reader there, and mark the rows it rests on. Without it
+                       the page is an undifferentiated dump of everything on the document. -->
                   <a
                     [routerLink]="['/documents', evidence.documentId]"
+                    [queryParams]="{ alert: alert.id }"
                     class="rounded border border-slate-200 px-2 py-0.5 text-xs text-brand-700 hover:border-brand-500"
                   >
                     {{ evidence.fileName }}
