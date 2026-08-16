@@ -20,6 +20,12 @@
          The structural fix is to split Contracts + AiPipeline into their own library. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
 
+    <!-- Trap verification (the traps mode) drives the merge, rule checks and cross-check, all of which
+         read a DbContext. The in-memory provider keeps a verification run out of the Supabase
+         database that backs the demo; MediTrailDbContext already declares the non-Postgres
+         mappings the tests use. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.10" />
+
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="10.0.10" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />

@@ -105,6 +105,52 @@ cd frontend && npm start
 
 ---
 
+## Quality gates
+
+Both live in `tools/MediTrail.GoldenRunner` and read the API project's user-secrets, so there is one
+place holding the API key. Both exit non-zero on failure, so either can gate a build. Both need the
+dataset images copied in locally — they are gitignored PHI (see [dataset/README.md](dataset/README.md)).
+
+### Extraction accuracy (§18.1)
+
+Field-by-field against the hand-labelled golden labels. This is the headline accuracy figure.
+
+```bash
+dotnet run --project tools/MediTrail.GoldenRunner
+dotnet run --project tools/MediTrail.GoldenRunner -- patient_x    # one document set
+```
+
+### Trap verification (§18.2)
+
+Answers the question accuracy cannot: *does a real image become a raised alert?* It runs every
+document through the production path — upload → SHA-256 extraction cache → vision extraction →
+merge → deterministic rule checks → LLM cross-check → openFDA — and asserts the planted traps in
+[dataset/golden/traps.md](dataset/golden/traps.md) against the alerts that were actually persisted.
+Only the database and object storage are substituted (in-memory and a scratch directory), so a run
+leaves no patient data in the Supabase project.
+
+```bash
+dotnet run --project tools/MediTrail.GoldenRunner -- --traps
+
+# Real model calls cost money — narrow the run while investigating one finding.
+dotnet run --project tools/MediTrail.GoldenRunner -- --traps --patient=y
+dotnet run --project tools/MediTrail.GoldenRunner -- --traps --trap=Y1   # implies its patient set
+dotnet run --project tools/MediTrail.GoldenRunner -- --traps --verbose   # why a finding was dropped
+```
+
+It prints every alert per patient — type, severity, confidence, the medications and documents it
+cites, whether a professional consult is flagged — then PASS/FAIL per trap with the observed value
+on failure. A filtered run reports the traps it could not reach as SKIP; a skip is never a pass.
+
+`--verbose` raises the pipeline's own logging to Debug. The reasons a cross-check finding was
+dropped live there rather than at Information, because they name the patient's medications and must
+not reach production logs.
+
+The current results, and the two traps that do **not** fire, are recorded in the Detection status
+table in [dataset/golden/traps.md](dataset/golden/traps.md).
+
+---
+
 ## Milestone status
 
 | Milestone | State |

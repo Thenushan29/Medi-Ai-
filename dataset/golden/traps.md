@@ -2,8 +2,8 @@
 
 Every item here must be detected (§18.2). This list doubles as the demonstration script.
 
-Derived by reading all 16 documents directly. **Not yet confirmed against the pipeline** — each row
-gets a ✅ only once the system actually raises it.
+Derived by reading all 16 documents directly. The Detection status table at the bottom records what
+the pipeline actually did with them, not what the unit tests do with constructed inputs.
 
 ---
 
@@ -60,11 +60,25 @@ Consequences:
 
 ## Detection status
 
+Confirmed on **2026-08-16** by `dotnet run --project tools/MediTrail.GoldenRunner -- --traps`, over
+all 16 images, with `google/gemini-2.5-flash` on OpenRouter — the model the demo runs on.
+
+The harness runs the production path end to end: upload → SHA-256 cache → `VisionDocumentExtractor`
+→ `ProcessingWorker` → `ExtractionMerger` → `DeterministicRuleChecker` → `InteractionCrossChecker` →
+openFDA → persisted alerts, then asserts against the alerts that were written. Only the database
+(in-memory) and object storage (a scratch directory) are substituted, so a verification run leaves
+no patient data in the demo project; nothing that reads a document or decides a finding is stubbed.
+A ✅ below therefore means the system raised the finding from the image, not that a unit test passed
+on a hand-built input.
+
+Both failures reproduced identically on two consecutive runs. Neither has been fixed — diagnosing
+them is deliberately separate from measuring them.
+
 | Trap | Detected | Notes |
 |---|---|---|
-| Y1 same-document contradiction | ⬜ | The one that must work |
-| Y2 duplicate file cached | ⬜ | |
-| Y3 three beta-blockers | ⬜ | |
-| X1 warfarin + aspirin | ⬜ | |
-| Y10 / Y11 null dates | ⬜ | Hallucination check |
-| X6 placeholders not invented | ⬜ | Hallucination check |
+| Y1 same-document contradiction | ✅ | Red `DocumentWarningConflict`, confidence 90, consult set, evidence `patient_y_year2_1`. Raised through the **`warningsInDocument` path**, which is the only path available: the extraction produced zero recorded-allergy rows across the whole set. The warning merged as `relatesTo: [paracetamol]` — `acetaminophen` was normalized on the way in, which is what makes it collide with the prescribed Paracetamol |
+| Y2 duplicate file cached | ✅ | Verified through the real cache, not by inspection: both files hash to `2ed598c9c904…`, `year3_2` extracted, `year3_3` came back `Cached` with no second model call. No same-generic duplicate or dosage alert over any of the four shared generics |
+| Y3 three beta-blockers | ❌ | Only **two** — "2 beta blockers in your records" naming atenolol and metoprolol. Breaks at extraction/normalization, not at the rule check: `Oxprelol 50mg` merged with `genericName: null`, and a null generic is excluded from every cross-check. The model declining to resolve the misspelling is what Y12 asks for, so **Y3 and Y12 cannot both be satisfied as written** unless the brand table learns `oxprelol` |
+| X1 warfarin + aspirin | ❌ | The model *did* propose it. The alert was dropped by the grounding check in `InteractionCrossChecker`, which requires an exact key match: the record holds the combination product `aspirin/codeine`, and `byGeneric` has no `aspirin` key. Break is in normalization — a combination generic is not decomposed into its components. Warfarin + Paracetamol was raised instead, from the same page |
+| Y10 / Y11 null dates | ✅ | Both `documentDate: null`, and the model returned null *before* normalization in both cases — the null is a refusal to guess, not a parse failure downstream of a guess |
+| X6 placeholders not invented | ✅ | 14 placeholder rows across the four sample documents, every one with `genericName: null`. None entered a cross-check, and none appears in any alert |

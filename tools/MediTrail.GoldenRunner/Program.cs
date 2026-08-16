@@ -6,6 +6,7 @@ using MediTrail.Api.AiPipeline.Providers;
 using MediTrail.Api.Configuration;
 using MediTrail.Api.Contracts.Extraction;
 using MediTrail.GoldenRunner;
+using MediTrail.GoldenRunner.Traps;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -24,6 +25,14 @@ var repoRoot = FindRepositoryRoot();
 var datasetDir = Path.Combine(repoRoot, "dataset");
 var goldenDir = Path.Combine(datasetDir, "golden");
 var filter = args.FirstOrDefault(a => !a.StartsWith('-'));
+
+// Trap verification (§18.2) asks a different question from field accuracy (§18.1) — does a real
+// image become a raised alert — but it needs the same dataset and the same API key, so it lives
+// behind a mode switch here rather than in a second tool. See Traps/TrapRunner.cs.
+if (args.Contains("--traps"))
+{
+    return await TrapRunner.RunAsync(repoRoot, datasetDir, args);
+}
 
 if (!Directory.Exists(goldenDir))
 {
