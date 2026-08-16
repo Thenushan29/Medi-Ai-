@@ -69,6 +69,11 @@ public static partial class DrugNameNormalizer
         ["betaloc"] = "metoprolol",
         ["lopressor"] = "metoprolol",
         ["trasicor"] = "oxprenolol",
+        // Printed as "Oxprelol" on patient_y_year3_6 (traps.md Y12). The model is right to decline
+        // an ambiguous misspelling, but the null generic then hides a third beta-blocker from the
+        // class check (traps.md Y3). Resolved here, where a closed table can be reviewed, rather
+        // than by asking the prompt to guess — the same reason "crocine" sits beside "crocin".
+        ["oxprelol"] = "oxprenolol",
         ["tenormin"] = "atenolol",
         ["inderal"] = "propranolol",
         ["concor"] = "bisoprolol",

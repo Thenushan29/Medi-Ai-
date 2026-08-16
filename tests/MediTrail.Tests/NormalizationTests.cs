@@ -7,11 +7,17 @@ public class DrugNameNormalizerTests
 {
     [Theory]
     [InlineData("Betaloc", "metoprolol")]
-    [InlineData("Oxprelol", null)]          // misspelt brand — not in the table, honestly null
     [InlineData("Crocin", "paracetamol")]
     [InlineData("TAB. CROCINE", "paracetamol")]
     [InlineData("Lipitor 10mg", "atorvastatin")]
     [InlineData("Rantac", "ranitidine")]
+    // Printed as "Oxprelol" on patient_y_year3_6. This case previously expected null — an honest
+    // answer while the table did not know the name, but the measured cost was traps.md Y3: the
+    // model declines the misspelling (Y12), nothing else resolves it, and a null generic is
+    // excluded from every cross-check, so the beta-blocker alert named two drugs instead of three.
+    // The table now carries it, which is a review-able place for the decision to live.
+    [InlineData("Oxprelol", "oxprenolol")]
+    [InlineData("Oxprelol 50mg", "oxprenolol")]
     [InlineData("DEMO MEDICINE 1", null)]
     [InlineData("Zzyxbrand", null)]
     public void ResolvesKnownBrandsAndAdmitsUnknownOnes(string brand, string? expected) =>

@@ -143,6 +143,46 @@ public class RuleCheckerTests : IDisposable
     }
 
     /// <summary>
+    /// traps.md Y3, in the shape the pipeline actually produced it rather than the shape the test
+    /// above assumes.
+    ///
+    /// The run recorded in traps.md merged `Oxprelol 50mg` with `genericName: null`, because the
+    /// model correctly declined to resolve an ambiguous misspelling (Y12) and the brand table did
+    /// not know it either. A null generic is excluded from every cross-check, so the class alert
+    /// named two beta-blockers instead of three — a finding lost to a spelling, with no signal.
+    ///
+    /// The third generic here comes from the brand fallback, which is the only route available
+    /// when the model returns null: if the table forgets `oxprelol`, this fails.
+    /// </summary>
+    [Fact]
+    public async Task ThirdBetaBlockerReachesTheClassCheckThroughTheBrandFallback()
+    {
+        var oxprenolol = DrugNameNormalizer.GenericForBrand("Oxprelol 50mg");
+        Assert.Equal("oxprenolol", oxprenolol);
+
+        var dated = Guid.NewGuid();
+        var undated = Guid.NewGuid();
+        AddDocument(dated, new DateOnly(2007, 7, 7));
+        AddDocument(undated, null);
+
+        AddMedication(dated, generic: "atenolol", strength: 50, perDay: 1);
+        AddMedication(undated, generic: "metoprolol", brand: "Betaloc", strength: 100, perDay: 2);
+        AddMedication(undated, generic: oxprenolol!, brand: "Oxprelol", strength: 50, perDay: 1);
+
+        await _db.SaveChangesAsync();
+
+        var alert = Assert.Single(await _checker.CheckAsync(_patientId),
+            x => x.Type == AlertType.DuplicatePrescription);
+
+        Assert.Equal(AlertSeverity.Red, alert.Severity);
+        Assert.Contains("beta blocker", alert.Title, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(
+            new[] { "atenolol", "metoprolol", "oxprenolol" },
+            alert.InvolvedGenerics.Order().ToArray());
+    }
+
+    /// <summary>
     /// Two beta-blockers on one page (traps.md Y4) need no date reasoning at all — one prescription
     /// is one prescribing decision.
     /// </summary>
