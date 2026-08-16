@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MediTrail.Api.AiPipeline;
 using MediTrail.Api.AiPipeline.CrossCheck;
 using MediTrail.Api.AiPipeline.Extraction;
@@ -50,8 +51,9 @@ internal static class TrapRunner
             return 2;
         }
 
-        // A trap implies the set it lives in — re-running Y1 must not re-extract patient x.
-        string[] sets = trapFilter is not null
+        // A trap implies the set it lives in — re-running Y1 must not re-extract patient x. A trap
+        // scoped "*" spans every document, so it takes both.
+        string[] sets = trapFilter is not null && TrapChecks.PatientOf[trapFilter] != "*"
             ? [TrapChecks.PatientOf[trapFilter]]
             : patientFilter is not null
                 ? [Normalize(patientFilter)]
@@ -129,7 +131,46 @@ internal static class TrapRunner
 
         foreach (var set in sets) Report(runs[set]);
 
-        return Verdict(traps, runs);
+        return Verdict(traps, new TrapContext(runs, GoldenDates(datasetDir)));
+    }
+
+    /// <summary>
+    /// Each label's expected <c>documentDate</c>, null where the label records the printed date as
+    /// unreadable. That null is the assertion: an extracted date where the label has none is a
+    /// value the model supplied from nowhere.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string?> GoldenDates(string datasetDir)
+    {
+        var goldenDir = Path.Combine(datasetDir, "golden");
+        var dates = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        if (!Directory.Exists(goldenDir)) return dates;
+
+        foreach (var path in Directory.GetFiles(goldenDir, "*.json"))
+        {
+            // Leading underscore marks a template or note, not a document.
+            if (Path.GetFileName(path).StartsWith('_')) continue;
+
+            try
+            {
+                using var json = JsonDocument.Parse(File.ReadAllText(path));
+
+                var value = json.RootElement.TryGetProperty("documentDate", out var element)
+                    && element.ValueKind is not JsonValueKind.Null
+                        ? element.GetString()
+                        : null;
+
+                dates[Path.GetFileNameWithoutExtension(path)] = value;
+            }
+            catch (JsonException ex)
+            {
+                // An unparseable label must not be read as "expects null" — that would turn a
+                // broken file into a silently passing hallucination check.
+                Console.Error.WriteLine($"  Label {Path.GetFileName(path)} could not be parsed: {ex.Message}");
+            }
+        }
+
+        return dates;
     }
 
     // -----------------------------------------------------------------------
@@ -367,17 +408,14 @@ internal static class TrapRunner
         }
     }
 
-    private static int Verdict(IReadOnlyList<string> traps, IReadOnlyDictionary<string, PatientRun> runs)
+    private static int Verdict(IReadOnlyList<string> traps, TrapContext context)
     {
         Console.WriteLine();
         Console.WriteLine(new string('=', 100));
         Console.WriteLine("Trap assertions (dataset/golden/traps.md §18.2)");
         Console.WriteLine(new string('=', 100));
 
-        var results = traps
-            .Select(id => TrapChecks.Evaluate(
-                id, runs.TryGetValue(TrapChecks.PatientOf[id], out var run) ? run : null))
-            .ToList();
+        var results = traps.Select(id => TrapChecks.Evaluate(id, context)).ToList();
 
         foreach (var result in results)
         {

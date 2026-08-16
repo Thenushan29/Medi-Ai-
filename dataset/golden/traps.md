@@ -60,8 +60,10 @@ Consequences:
 
 ## Detection status
 
-Confirmed on **2026-08-16** by `dotnet run --project tools/MediTrail.GoldenRunner -- --traps`, over
-all 16 images, with `google/gemini-2.5-flash` on OpenRouter — the model the demo runs on.
+Last confirmed on **2026-08-16** by `dotnet run --project tools/MediTrail.GoldenRunner -- --traps`,
+over all 16 images, with `google/gemini-2.5-flash` on OpenRouter — the model the demo runs on.
+The first run that day found Y3 and X1 failing; both fixes landed on this branch and the re-run
+below confirms them from the image, not from a unit test.
 
 The harness runs the production path end to end: upload → SHA-256 cache → `VisionDocumentExtractor`
 → `ProcessingWorker` → `ExtractionMerger` → `DeterministicRuleChecker` → `InteractionCrossChecker` →
@@ -71,14 +73,12 @@ no patient data in the demo project; nothing that reads a document or decides a 
 A ✅ below therefore means the system raised the finding from the image, not that a unit test passed
 on a hand-built input.
 
-Both failures reproduced identically on two consecutive runs. Neither has been fixed — diagnosing
-them is deliberately separate from measuring them.
-
 | Trap | Detected | Notes |
 |---|---|---|
 | Y1 same-document contradiction | ✅ | Red `DocumentWarningConflict`, confidence 90, consult set, evidence `patient_y_year2_1`. Raised through the **`warningsInDocument` path**, which is the only path available: the extraction produced zero recorded-allergy rows across the whole set. The warning merged as `relatesTo: [paracetamol]` — `acetaminophen` was normalized on the way in, which is what makes it collide with the prescribed Paracetamol |
 | Y2 duplicate file cached | ✅ | Verified through the real cache, not by inspection: both files hash to `2ed598c9c904…`, `year3_2` extracted, `year3_3` came back `Cached` with no second model call. No same-generic duplicate or dosage alert over any of the four shared generics |
-| Y3 three beta-blockers | ❌ | Only **two** — "2 beta blockers in your records" naming atenolol and metoprolol. Breaks at extraction/normalization, not at the rule check: `Oxprelol 50mg` merged with `genericName: null`, and a null generic is excluded from every cross-check. The model declining to resolve the misspelling is what Y12 asks for, so **Y3 and Y12 cannot both be satisfied as written** unless the brand table learns `oxprelol` |
-| X1 warfarin + aspirin | ❌ | The model *did* propose it. The alert was dropped by the grounding check in `InteractionCrossChecker`, which requires an exact key match: the record holds the combination product `aspirin/codeine`, and `byGeneric` has no `aspirin` key. Break is in normalization — a combination generic is not decomposed into its components. Warfarin + Paracetamol was raised instead, from the same page |
+| Y3 three beta-blockers | ✅ | "3 beta blockers in your records" — Red, confidence 90, consult set, naming atenolol, metoprolol **and oxprenolol**, evidence `y_year3_2` + `y_year3_6`. First run failed with two of three: `Oxprelol 50mg` merged with a null generic. Fixed by teaching the brand table `oxprelol` → oxprenolol — a dataset-specific entry; the general gap (an unresolved generic silently exits every check) is covered by the `UnresolvedMedication` alert, which fires for `SM FIBRO` on this same set |
+| X1 warfarin + aspirin | ✅ | "Warfarin and Aspirin/codeine may interact" — Red, confidence 100, consult set, **openFDA Confirmed** (the label's own `drug_interactions` text), evidence `patient_x_year3_2`. First run failed: the record holds the combination `aspirin/codeine` and the grounding lookup required an exact key. Grounding is now component-wise; ungrounded findings are still dropped |
 | Y10 / Y11 null dates | ✅ | Both `documentDate: null`, and the model returned null *before* normalization in both cases — the null is a refusal to guess, not a parse failure downstream of a guess |
-| X6 placeholders not invented | ✅ | 14 placeholder rows across the four sample documents, every one with `genericName: null`. None entered a cross-check, and none appears in any alert |
+| X6 placeholders not invented | ✅ | 14 placeholder rows across the four sample documents, every one with `genericName: null`. None entered a cross-check, and none appears in any alert. Placeholders are also excluded from the `UnresolvedMedication` alert — not a drug is a different fact from not identified |
+| DATES all-document null-date sweep | ❌ | Y10/Y11 name two documents, so the harness now checks **every** document whose golden label says the date is unreadable — five in this dataset. Four extract null; **`patient_y_year1_1` extracts `2022-07-10`**, and the model returned that string outright before normalization, on a handwritten NHS script whose label says no legible date (Y9). This is a prompt-level hallucination, deliberately not fixed in the same change that widened the check |

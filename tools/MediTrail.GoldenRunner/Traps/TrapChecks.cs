@@ -8,6 +8,22 @@ internal enum TrapOutcome { Pass, Fail, Skipped }
 internal sealed record TrapResult(string Id, string Description, TrapOutcome Outcome, string Detail);
 
 /// <summary>
+/// What the assertions get to look at: the patient sets this run produced, and the hand-labelled
+/// expectations they are judged against.
+/// </summary>
+/// <param name="Runs">Keyed by patient set. A set absent here was not part of this run.</param>
+/// <param name="GoldenDates">
+/// Label name to its expected <c>documentDate</c>, null where the label says the printed date is
+/// unreadable. A name absent here has no label at all.
+/// </param>
+internal sealed record TrapContext(
+    IReadOnlyDictionary<string, PatientRun> Runs,
+    IReadOnlyDictionary<string, string?> GoldenDates)
+{
+    public PatientRun? Run(string set) => Runs.TryGetValue(set, out var run) ? run : null;
+}
+
+/// <summary>
 /// The assertions from <c>dataset/golden/traps.md</c>, evaluated against what the pipeline actually
 /// wrote.
 ///
@@ -17,7 +33,10 @@ internal sealed record TrapResult(string Id, string Description, TrapOutcome Out
 /// </summary>
 internal static class TrapChecks
 {
-    /// <summary>Which patient set each trap needs, so a filtered run knows what it cannot judge.</summary>
+    /// <summary>
+    /// Which patient set each trap needs, so a filtered run knows what it cannot judge.
+    /// <c>*</c> means the check spans every set.
+    /// </summary>
     public static readonly IReadOnlyDictionary<string, string> PatientOf = new Dictionary<string, string>
     {
         ["Y1"] = "y",
@@ -26,22 +45,87 @@ internal static class TrapChecks
         ["X1"] = "x",
         ["Y10"] = "y",
         ["Y11"] = "y",
-        ["X6"] = "x"
+        ["X6"] = "x",
+        ["DATES"] = "*"
     };
 
     public static IReadOnlyList<string> All => [.. PatientOf.Keys];
 
-    public static TrapResult Evaluate(string id, PatientRun? run) => id switch
+    public static TrapResult Evaluate(string id, TrapContext context) => id switch
     {
-        "Y1" => Y1(run),
-        "Y2" => Y2(run),
-        "Y3" => Y3(run),
-        "X1" => X1(run),
-        "Y10" => NullDate(run, "Y10", "patient_y_year3_5", "the placeholder date \"Jan 9, 20yy\""),
-        "Y11" => NullDate(run, "Y11", "patient_y_year3_6", "the ambiguous date \"09-11-12\""),
-        "X6" => X6(run),
+        "Y1" => Y1(context.Run("y")),
+        "Y2" => Y2(context.Run("y")),
+        "Y3" => Y3(context.Run("y")),
+        "X1" => X1(context.Run("x")),
+        "Y10" => NullDate(context.Run("y"), "Y10", "patient_y_year3_5", "the placeholder date \"Jan 9, 20yy\""),
+        "Y11" => NullDate(context.Run("y"), "Y11", "patient_y_year3_6", "the ambiguous date \"09-11-12\""),
+        "X6" => X6(context.Run("x")),
+        "DATES" => Dates(context),
         _ => new TrapResult(id, "unknown trap", TrapOutcome.Skipped, "No such trap id.")
     };
+
+    // -----------------------------------------------------------------------
+    // DATES — the same hallucination check as Y10/Y11, over every document
+    // -----------------------------------------------------------------------
+
+    private const string DatesDescription =
+        "Every document whose golden label records an unreadable date extracts documentDate: null";
+
+    /// <summary>
+    /// Y10 and Y11 name two documents, so a date invented on any of the other fourteen passes
+    /// unnoticed — and one was. `patient_y_year1_1` is a handwritten script whose label says the
+    /// date is unreadable, and the run recorded 2022-07-10.
+    ///
+    /// Checks only the documents whose label says null. Where the label has a date, whether the
+    /// model read it correctly is field accuracy, which the golden runner already measures; here
+    /// the question is narrower and more serious — did the model fill in something that is not on
+    /// the page.
+    /// </summary>
+    private static TrapResult Dates(TrapContext context)
+    {
+        if (context.Runs.Count == 0) return Skipped("DATES", DatesDescription);
+
+        var invented = new List<string>();
+        var unlabelled = new List<string>();
+        var checkedNames = new List<string>();
+
+        foreach (var document in context.Runs.Values.SelectMany(run => run.Documents))
+        {
+            if (!context.GoldenDates.TryGetValue(document.Name, out var golden))
+            {
+                unlabelled.Add(document.Name);
+                continue;
+            }
+
+            // The label read a date, so this is an accuracy question, not a hallucination one.
+            if (golden is not null) continue;
+
+            checkedNames.Add(document.Name);
+
+            if (document.DocumentDate is not null)
+            {
+                var raw = string.IsNullOrEmpty(document.RawDocumentDate)
+                    ? "null"
+                    : $"\"{document.RawDocumentDate}\"";
+
+                invented.Add(
+                    $"{document.Name}: extracted {document.DocumentDate:yyyy-MM-dd}, model returned " +
+                    $"{raw} before normalization");
+            }
+        }
+
+        var scope =
+            $"{checkedNames.Count} document(s) whose label says the date is unreadable" +
+            (context.Runs.Count == 1 ? $", patient set {context.Runs.Keys.First()} only" : string.Empty) +
+            (unlabelled.Count > 0 ? $". No label for {Join(unlabelled)}, not checked" : string.Empty);
+
+        return invented.Count == 0
+            ? new TrapResult("DATES", DatesDescription, TrapOutcome.Pass,
+                $"{scope}. Every one extracted null.")
+            : new TrapResult("DATES", DatesDescription, TrapOutcome.Fail,
+                $"INVENTED DATE on {invented.Count} of {checkedNames.Count}: " +
+                $"{string.Join("; ", invented)}. {scope}.");
+    }
 
     // -----------------------------------------------------------------------
     // Y1 — the headline finding (FR-5.5)
@@ -326,7 +410,9 @@ internal static class TrapChecks
 
     private static TrapResult Skipped(string id, string description) =>
         new(id, description, TrapOutcome.Skipped,
-            $"Patient set '{PatientOf[id]}' was not part of this run.");
+            PatientOf[id] == "*"
+                ? "No patient set was part of this run."
+                : $"Patient set '{PatientOf[id]}' was not part of this run.");
 
     private static string Join(IReadOnlyList<string> values) =>
         values.Count == 0 ? "(none)" : string.Join(", ", values);
