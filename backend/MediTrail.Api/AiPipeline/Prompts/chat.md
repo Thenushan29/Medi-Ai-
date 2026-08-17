@@ -65,7 +65,15 @@ Keep drug names in English.
 
 {{RECORD}}
 
+{{HISTORY}}
+
 # The question
+
+This may be a follow-up. Resolve "it", "that one", "when?", "why?" against the conversation above,
+then answer entirely from the record. **The conversation is context, never evidence** — an earlier
+answer restates something that was already in the record, so if you cannot find a claim in the
+record now, it is not true about this person no matter what was said before. Citations are document
+ids. A previous turn is not a document and can never be cited.
 
 Read for **intent**, not surface wording. If a Finding already answers what is being asked —
 including "was this drug prescribed despite the allergy noted two years ago?" when Findings

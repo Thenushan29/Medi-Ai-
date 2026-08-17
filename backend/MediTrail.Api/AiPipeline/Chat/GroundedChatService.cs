@@ -19,7 +19,11 @@ namespace MediTrail.Api.AiPipeline.Chat;
 /// </summary>
 public interface IGroundedChatService
 {
-    Task<ChatAnswerDto> AskAsync(Guid patientId, string question, CancellationToken ct = default);
+    Task<ChatAnswerDto> AskAsync(
+        Guid patientId,
+        string question,
+        IReadOnlyList<ChatTurn>? history = null,
+        CancellationToken ct = default);
 }
 
 public sealed partial class GroundedChatService(
@@ -28,7 +32,24 @@ public sealed partial class GroundedChatService(
     IServiceProvider services,
     ILogger<GroundedChatService> logger) : IGroundedChatService
 {
-    public async Task<ChatAnswerDto> AskAsync(Guid patientId, string question, CancellationToken ct = default)
+    /// <summary>
+    /// How many completed exchanges travel with a question.
+    ///
+    /// Four, not the whole session. The record is already the large half of this prompt — sixteen
+    /// documents of medications, warnings and findings — and every turn added competes with it for
+    /// the same capped output budget (§11.2). A follow-up chain at a demo is two or three turns;
+    /// four covers that with room, and an older exchange is not what "when?" refers to.
+    /// </summary>
+    private const int MaxHistoryTurns = 4;
+
+    /// <summary>A prior answer is quoted for context only, so it is kept short.</summary>
+    private const int MaxHistoryAnswerLength = 400;
+
+    public async Task<ChatAnswerDto> AskAsync(
+        Guid patientId,
+        string question,
+        IReadOnlyList<ChatTurn>? history = null,
+        CancellationToken ct = default)
     {
         var ai = services.GetService<IAiClient>();
 
@@ -56,6 +77,7 @@ public sealed partial class GroundedChatService(
             var prompt = prompts.Get("chat", new Dictionary<string, string>
             {
                 ["RECORD"] = record,
+                ["HISTORY"] = FormatHistory(history),
                 ["QUESTION"] = question.Trim()
             });
 
@@ -107,6 +129,54 @@ public sealed partial class GroundedChatService(
             logger.LogError(ex, "Chat failed for {PatientId}", patientId);
             return Unavailable("I could not reach the question service. Please try again in a moment.");
         }
+    }
+
+    /// <summary>
+    /// The recent conversation, rendered into its own clearly fenced section.
+    ///
+    /// Kept structurally distinct from the record so the model cannot read a sentence the *user*
+    /// typed, or one it produced itself last turn, as something a document says. The section is
+    /// empty — not an empty heading — when there is nothing to show, so a first question looks
+    /// exactly as it did before this existed.
+    /// </summary>
+    private static string FormatHistory(IReadOnlyList<ChatTurn>? history)
+    {
+        var recent = (history ?? [])
+            .Where(turn => !string.IsNullOrWhiteSpace(turn.Question))
+            .TakeLast(MaxHistoryTurns)
+            .ToList();
+
+        if (recent.Count == 0) return string.Empty;
+
+        var builder = new StringBuilder();
+
+        builder.AppendLine("# Earlier in this conversation");
+        builder.AppendLine();
+        builder.AppendLine(
+            "Context for resolving what the new question refers to — \"it\", \"that drug\", " +
+            "\"when?\". **This is not a source.** Nothing below is part of the record. An answer " +
+            "you gave earlier is not evidence that something is true about this person: if a claim " +
+            "appears here but not in the record above, do not repeat it as fact, and never cite a " +
+            "turn — citations are document ids from the record, only.");
+        builder.AppendLine();
+
+        foreach (var turn in recent)
+        {
+            builder.AppendLine($"- User asked: {OneLine(turn.Question)}");
+            builder.AppendLine($"  You answered: {Shorten(OneLine(turn.Answer))}");
+        }
+
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    private static string Shorten(string? answer)
+    {
+        if (string.IsNullOrWhiteSpace(answer)) return "(no answer recorded)";
+
+        return answer.Length <= MaxHistoryAnswerLength
+            ? answer
+            : answer[..MaxHistoryAnswerLength] + "…";
     }
 
     /// <summary>

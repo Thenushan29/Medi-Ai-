@@ -144,7 +144,7 @@ public sealed class PatientsController(
     public async Task<ActionResult<ChatAnswerDto>> Ask(Guid id, AskRequest request, CancellationToken ct)
     {
         if (await patients.GetAsync(id, ct) is null) return NotFound(NotFoundError(id));
-        return Ok(await chat.AskAsync(id, request.Question, ct));
+        return Ok(await chat.AskAsync(id, request.Question, request.History, ct));
     }
 
     private ApiError NotFoundError(Guid id) => new()

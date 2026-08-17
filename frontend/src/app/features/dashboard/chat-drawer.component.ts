@@ -180,9 +180,17 @@ export class ChatDrawerComponent {
 
     this.draft = '';
     this.busy.set(true);
+
+    // Snapshot the completed exchanges before the pending turn is appended, so the question is
+    // never sent as part of its own history. Answered turns only — a failed or in-flight turn has
+    // nothing a follow-up could resolve against.
+    const history = this.turns()
+      .filter(turn => turn.answer)
+      .map(turn => ({ question: turn.question, answer: turn.answer!.answerEn }));
+
     this.turns.update(list => [...list, { question: text, pending: true }]);
 
-    this.api.ask(this.patientId(), text).subscribe({
+    this.api.ask(this.patientId(), text, history).subscribe({
       next: answer => {
         this.turns.update(list =>
           list.map((turn, i) => (i === list.length - 1 ? { ...turn, answer, pending: false } : turn))

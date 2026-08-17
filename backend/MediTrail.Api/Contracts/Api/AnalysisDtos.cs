@@ -112,6 +112,26 @@ public sealed record AskRequest
     [Required(AllowEmptyStrings = false)]
     [StringLength(1000, MinimumLength = 2)]
     public string Question { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Earlier turns in the open chat session, oldest first, so a follow-up like "when?" has
+    /// something to resolve against (FR-7.2). Client-held — nothing is persisted, and a reopened
+    /// drawer starts empty.
+    ///
+    /// Trimmed server-side regardless of what arrives: the client is not trusted to bound the
+    /// prompt.
+    /// </summary>
+    public IReadOnlyList<ChatTurn> History { get; init; } = [];
+}
+
+/// <summary>One completed exchange. Context for the next question, never a source for it.</summary>
+public sealed record ChatTurn
+{
+    [StringLength(1000)]
+    public string Question { get; init; } = string.Empty;
+
+    [StringLength(4000)]
+    public string Answer { get; init; } = string.Empty;
 }
 
 /// <summary>Chat answer with citations, confidence and the consult flag (FR-7.3, 7.4, 7.6).</summary>

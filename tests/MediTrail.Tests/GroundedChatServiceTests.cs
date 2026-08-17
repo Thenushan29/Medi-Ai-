@@ -1,3 +1,4 @@
+using MediTrail.Api.Contracts.Api;
 using System.Text.RegularExpressions;
 using MediTrail.Api.AiPipeline;
 using MediTrail.Api.AiPipeline.Chat;
@@ -227,6 +228,116 @@ public partial class GroundedChatServiceTests : IDisposable
 
         Assert.True(heading >= 0 && diagnosis > heading && medication > diagnosis,
             "The diagnosis must sit under its document heading and before that visit's medications.");
+    }
+
+    /// <summary>
+    /// "Was warfarin prescribed with aspirin?" → "Yes, on August 5, 2019…" → "When?" used to reach
+    /// the model with no idea what "when" referred to. The prior turns now travel with the
+    /// question, in their own section.
+    /// </summary>
+    [Fact]
+    public async Task SendsPriorTurnsAsConversationContextSeparateFromTheRecord()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "warfarin", warning: "Monitor INR closely.");
+
+        await _db.SaveChangesAsync();
+
+        await Service().AskAsync(patientId, "When?", [
+            new ChatTurn { Question = "Was warfarin prescribed with aspirin?", Answer = "Yes, on August 5, 2019." }
+        ]);
+
+        var prompt = _ai.Prompt;
+
+        Assert.Contains("Was warfarin prescribed with aspirin?", prompt, StringComparison.Ordinal);
+        Assert.Contains("Yes, on August 5, 2019.", prompt, StringComparison.Ordinal);
+
+        // Fenced as conversation, and after the record — the model must not be able to read a
+        // sentence the user typed as something a document says.
+        var record = prompt.IndexOf("# The patient's record", StringComparison.Ordinal);
+        var conversation = prompt.IndexOf("# Earlier in this conversation", StringComparison.Ordinal);
+
+        Assert.True(record >= 0 && conversation > record,
+            "Conversation history must be its own section, after the record.");
+
+        // The grounding rule has to survive the longer prompt, restated where the history sits.
+        Assert.Contains("This is not a source.", prompt, StringComparison.Ordinal);
+        Assert.Contains("never cite a turn", prompt, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A first question must look exactly as it did before history existed — an empty section, not
+    /// an empty heading inviting the model to reason about a conversation that never happened.
+    /// </summary>
+    [Fact]
+    public async Task OmitsTheConversationSectionEntirelyOnTheFirstQuestion()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+
+        await _db.SaveChangesAsync();
+
+        await Service().AskAsync(patientId, "What am I taking?");
+
+        Assert.DoesNotContain("# Earlier in this conversation", _ai.Prompt, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The record is the large half of this prompt; history competes with it for the same budget.
+    /// The client is not trusted to bound what it sends.
+    /// </summary>
+    [Fact]
+    public async Task KeepsOnlyTheMostRecentExchanges()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+
+        await _db.SaveChangesAsync();
+
+        var history = Enumerable.Range(1, 7)
+            .Select(i => new ChatTurn { Question = $"Question number {i}", Answer = $"Answer number {i}" })
+            .ToList();
+
+        await Service().AskAsync(patientId, "And now?", history);
+
+        var prompt = _ai.Prompt;
+
+        // Four kept, oldest three dropped.
+        Assert.DoesNotContain("Question number 3", prompt, StringComparison.Ordinal);
+        Assert.Contains("Question number 4", prompt, StringComparison.Ordinal);
+        Assert.Contains("Question number 7", prompt, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A claim that exists only in an earlier answer is not a fact about this person. The stub
+    /// model reports a contradiction only from the record, so an assertion planted in the history
+    /// must not produce one — and must not become a citation.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotTreatAClaimFromAnEarlierAnswerAsPartOfTheRecord()
+    {
+        // Seeded without the helper: it pairs a medication with a warning naming the same
+        // substance, which is a contradiction on its own. This record deliberately holds none, so
+        // the only place a contradiction could come from is the history.
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Take after food.");
+
+        await _db.SaveChangesAsync();
+
+        _db.Allergies.RemoveRange(await _db.Allergies.ToListAsync());
+        await _db.SaveChangesAsync();
+
+        var answer = await Service().AskAsync(patientId, "So am I allergic to penicillin?", [
+            new ChatTurn
+            {
+                Question = "Anything I should avoid?",
+                Answer = "You are allergic to penicillin and were given amoxicillin."
+            }
+        ]);
+
+        // Neither substance is anywhere in this patient's documents.
+        Assert.False(answer.FoundInDocuments);
+        Assert.Empty(answer.Citations);
     }
 
     private (Guid PatientId, Guid DocumentId) SeedWarningAndMatchingMedication(

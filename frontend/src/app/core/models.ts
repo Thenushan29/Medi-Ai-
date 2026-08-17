@@ -281,6 +281,12 @@ export interface LabTrendPoint {
   documentId: string;
 }
 
+/** One completed exchange, sent back so a follow-up can resolve against it. Never persisted. */
+export interface ChatTurn {
+  question: string;
+  answer: string;
+}
+
 export interface ChatAnswer {
   answerEn: string;
   answerTa?: string;
