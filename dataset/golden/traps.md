@@ -81,4 +81,32 @@ on a hand-built input.
 | X1 warfarin + aspirin | ✅ | "Warfarin and Aspirin/codeine may interact" — Red, confidence 100, consult set, **openFDA Confirmed** (the label's own `drug_interactions` text), evidence `patient_x_year3_2`. First run failed: the record holds the combination `aspirin/codeine` and the grounding lookup required an exact key. Grounding is now component-wise; ungrounded findings are still dropped |
 | Y10 / Y11 null dates | ✅ | Both `documentDate: null`, and the model returned null *before* normalization in both cases — the null is a refusal to guess, not a parse failure downstream of a guess |
 | X6 placeholders not invented | ✅ | 14 placeholder rows across the four sample documents, every one with `genericName: null`. None entered a cross-check, and none appears in any alert. Placeholders are also excluded from the `UnresolvedMedication` alert — not a drug is a different fact from not identified |
-| DATES all-document null-date sweep | ❌ | Y10/Y11 name two documents, so the harness now checks **every** document whose golden label says the date is unreadable — five in this dataset. Four extract null; **`patient_y_year1_1` extracts `2022-07-10`**, and the model returned that string outright before normalization, on a handwritten NHS script whose label says no legible date (Y9). This is a prompt-level hallucination, deliberately not fixed in the same change that widened the check |
+| DATES all-document null-date sweep | ❌ | Y10/Y11 name two documents, so the harness checks **every** document whose golden label says the date is unreadable — five in this dataset. Four extract null; **`patient_y_year1_1` does not.** Two prompt fixes were attempted and both were reverted — see below |
+
+### The one open failure: `patient_y_year1_1`
+
+The page prints **`07/10/2022`** and it is legible. Rule 3 of the extraction prompt already names
+this exact string as a case that must be `null`: four-digit year, both other parts ≤ 12, no way to
+know the order. The model reads it correctly and then resolves it anyway, from the fact that the
+form is a UK NHS script — day-first. Across runs it returns `2022-07-10` or `2022-10-07`, flipping
+between the two readings, which is the signature of exactly that guess.
+
+So this is **not** a legibility failure and not a missing rule. It is the model overriding a rule
+that names its input, under a strong contextual prior.
+
+Two prompt changes were measured against the §18.1 accuracy gate and **both were reverted** under
+the §18.4 rule that a prompt change may not cost accuracy:
+
+| Prompt | Overall | Hallucinated | `y_year1_1` |
+|---|---|---|---|
+| Committed (baseline) | **95.1%** (330/347) | 1 | `2022-07-10` |
+| + legibility precondition, + "a bare number is not a frequency" | 92.2% (321/348) | 1 | `2022-07-10` |
+| + rule 3 reinforced against national date conventions | 92.8% (324/349) | 5 | `2022-10-07` |
+
+Neither attempt fixed the date, and both made the reader worse — the frequency rule alone took
+frequency misses from 3 to 11. A fixed date is not worth a worse reader.
+
+Also worth recording: the `document` category scored 78.1%, 68.8% and 65.6% across the three runs
+on **three prompts that did not touch document metadata**. Temperature is 0, but the provider is not
+reproducible run to run, so a single gate run is a noisy measurement and small differences between
+runs should not be read as signal.
