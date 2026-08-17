@@ -287,9 +287,15 @@ export interface ChatTurn {
   answer: string;
 }
 
+/** How the question was written. Tanglish is Tamil in Latin script — its own answer language. */
+export type AskedLanguage = 'English' | 'Tamil' | 'Tanglish';
+
 export interface ChatAnswer {
   answerEn: string;
   answerTa?: string;
+  /** Present only when the question was asked in Tanglish. */
+  answerTanglish?: string;
+  askedLanguage: AskedLanguage;
   citations: string[];
   /** Only meaningful when `foundInDocuments` is true; fixed by the server otherwise. */
   confidence: number;

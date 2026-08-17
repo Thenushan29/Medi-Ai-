@@ -80,7 +80,7 @@ const SUGGESTIONS = [
               } @else if (turn.answer; as answer) {
                 <div class="rounded-2xl rounded-bl-sm bg-slate-50 px-4 py-3">
                   <p class="text-sm leading-relaxed text-slate-800">
-                    {{ language.pick(answer.answerEn, answer.answerTa) }}
+                    {{ display(answer) }}
                   </p>
 
                   <div class="mt-3 flex flex-wrap items-center gap-2">
@@ -176,6 +176,28 @@ export class ChatDrawerComponent {
   protected draft = '';
   protected readonly turns = signal<Turn[]>([]);
   protected readonly busy = signal(false);
+
+  /**
+   * Which version of the answer to show.
+   *
+   * Someone who types in Tamil script gets Tamil script back, and someone who types Tanglish gets
+   * Tanglish — replying in English to either is a worse answer even when it is a correct one. The
+   * EN/TA toggle still wins when the reader has set it to Tamil, so the global control is not
+   * quietly overridden; an English question is untouched by any of this, which matters because the
+   * demo is in English.
+   */
+  protected display(answer: ChatAnswer): string {
+    if (this.language.current() === 'ta') return answer.answerTa || answer.answerEn;
+
+    switch (answer.askedLanguage) {
+      case 'Tanglish':
+        return answer.answerTanglish || answer.answerEn;
+      case 'Tamil':
+        return answer.answerTa || answer.answerEn;
+      default:
+        return answer.answerEn;
+    }
+  }
 
   protected nameFor(documentId: string): string {
     return this.documents().find(d => d.documentId === documentId)?.fileName ?? 'source document';

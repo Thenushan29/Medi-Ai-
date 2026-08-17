@@ -65,6 +65,7 @@ public sealed partial class GroundedChatService(
             return new ChatAnswerDto
             {
                 AnswerEn = "There is nothing in your records yet. Upload some documents and I can answer questions about them.",
+                AskedLanguage = AskedLanguage.English,
                 Citations = [],
                 Confidence = 100,
                 SafetyRefusal = false,
@@ -132,6 +133,8 @@ public sealed partial class GroundedChatService(
             {
                 AnswerEn = answer.AnswerEn ?? "I could not find that in your uploaded documents.",
                 AnswerTa = answer.AnswerTa,
+                AnswerTanglish = answer.AnswerTanglish,
+                AskedLanguage = ParseLanguage(answer.AskedLanguage),
                 Citations = citations,
                 Confidence = confidence,
                 SafetyRefusal = safetyRefusal,
@@ -361,9 +364,22 @@ public sealed partial class GroundedChatService(
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
 
+    /// <summary>
+    /// Anything unrecognised falls back to English. The demo is in English, and a model that
+    /// mislabels or omits this field must not change what an English question does.
+    /// </summary>
+    private static AskedLanguage ParseLanguage(string? language) =>
+        language?.Trim().ToLowerInvariant() switch
+        {
+            "tamil" or "ta" => AskedLanguage.Tamil,
+            "tanglish" => AskedLanguage.Tanglish,
+            _ => AskedLanguage.English
+        };
+
     private static ChatAnswerDto Unavailable(string message) => new()
     {
         AnswerEn = message,
+        AskedLanguage = AskedLanguage.English,
         Citations = [],
         // A service failure is the one case where the number genuinely means "no support at all":
         // nothing was read, so nothing is known either way. Distinct from a not-found, which has
@@ -379,6 +395,8 @@ public sealed partial class GroundedChatService(
         [JsonPropertyName("safetyRefusal")] public bool SafetyRefusal { get; init; }
         [JsonPropertyName("answerEn")] public string? AnswerEn { get; init; }
         [JsonPropertyName("answerTa")] public string? AnswerTa { get; init; }
+        [JsonPropertyName("answerTanglish")] public string? AnswerTanglish { get; init; }
+        [JsonPropertyName("askedLanguage")] public string? AskedLanguage { get; init; }
         [JsonPropertyName("citations")] public IReadOnlyList<string> Citations { get; init; } = [];
         [JsonPropertyName("confidence")] public int Confidence { get; init; }
         [JsonPropertyName("consultProfessional")] public bool ConsultProfessional { get; init; }

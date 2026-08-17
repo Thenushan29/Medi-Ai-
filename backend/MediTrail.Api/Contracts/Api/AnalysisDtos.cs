@@ -124,6 +124,18 @@ public sealed record AskRequest
     public IReadOnlyList<ChatTurn> History { get; init; } = [];
 }
 
+/// <summary>
+/// Which language a question was written in. Tanglish — Tamil in Latin script — is how people
+/// actually type Tamil on a phone keyboard, and the model handled it unaided, so it is recognised
+/// as its own answer language rather than folded into either neighbour.
+/// </summary>
+public enum AskedLanguage
+{
+    English,
+    Tamil,
+    Tanglish
+}
+
 /// <summary>One completed exchange. Context for the next question, never a source for it.</summary>
 public sealed record ChatTurn
 {
@@ -139,6 +151,23 @@ public sealed record ChatAnswerDto
 {
     public required string AnswerEn { get; init; }
     public string? AnswerTa { get; init; }
+
+    /// <summary>
+    /// The answer in Tamil written in Latin script, when that is how the question was written
+    /// ("intha marunthu safe ah?"). Null otherwise.
+    ///
+    /// Its own field because Tanglish is neither of the other two: answering formal Tamil script
+    /// to someone who wrote in Latin script is as wrong as answering English.
+    /// </summary>
+    public string? AnswerTanglish { get; init; }
+
+    /// <summary>
+    /// The language the question was written in, so the interface can show that version first.
+    /// Both other versions are still generated and the EN/TA toggle still reaches them — this
+    /// decides the default only.
+    /// </summary>
+    public required AskedLanguage AskedLanguage { get; init; }
+
     public required IReadOnlyList<Guid> Citations { get; init; }
 
     /// <summary>
