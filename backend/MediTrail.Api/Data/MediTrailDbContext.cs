@@ -17,6 +17,7 @@ public class MediTrailDbContext(DbContextOptions<MediTrailDbContext> options) : 
     public DbSet<LabResult> LabResults => Set<LabResult>();
     public DbSet<Allergy> Allergies => Set<Allergy>();
     public DbSet<Alert> Alerts => Set<Alert>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -129,6 +130,22 @@ public class MediTrailDbContext(DbContextOptions<MediTrailDbContext> options) : 
                 .OnDelete(DeleteBehavior.Cascade);
 
             e.HasIndex(x => new { x.PatientId, x.IsDocumentWarning });
+        });
+
+        b.Entity<ChatMessage>(e =>
+        {
+            e.ToTable("chat_messages");
+            e.Property(x => x.AskedLanguage).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Question).HasMaxLength(1000);
+            if (isPostgres) e.Property(x => x.Citations).HasColumnType("uuid[]");
+
+            e.HasOne(x => x.Patient)
+                .WithMany(p => p.ChatMessages)
+                .HasForeignKey(x => x.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Read as one conversation, oldest first.
+            e.HasIndex(x => new { x.PatientId, x.CreatedAt });
         });
 
         b.Entity<Alert>(e =>

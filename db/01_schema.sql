@@ -288,3 +288,44 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260817054439_AddChatMessages') THEN
+    CREATE TABLE chat_messages (
+        id uuid NOT NULL,
+        patient_id uuid NOT NULL,
+        question character varying(1000) NOT NULL,
+        answer_en text NOT NULL,
+        answer_ta text,
+        answer_tanglish text,
+        asked_language character varying(16) NOT NULL,
+        citations uuid[] NOT NULL,
+        confidence integer NOT NULL,
+        safety_refusal boolean NOT NULL,
+        consult_professional boolean NOT NULL,
+        found_in_documents boolean NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_chat_messages PRIMARY KEY (id),
+        CONSTRAINT fk_chat_messages_patients_patient_id FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260817054439_AddChatMessages') THEN
+    CREATE INDEX ix_chat_messages_patient_id_created_at ON chat_messages (patient_id, created_at);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260817054439_AddChatMessages') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260817054439_AddChatMessages', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+

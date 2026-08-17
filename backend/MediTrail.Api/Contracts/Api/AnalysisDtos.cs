@@ -136,6 +136,14 @@ public enum AskedLanguage
     Tanglish
 }
 
+/// <summary>A stored exchange, replayed into the drawer when it reopens.</summary>
+public sealed record ChatMessageDto
+{
+    public required string Question { get; init; }
+    public required ChatAnswerDto Answer { get; init; }
+    public required DateTimeOffset AskedAt { get; init; }
+}
+
 /// <summary>One completed exchange. Context for the next question, never a source for it.</summary>
 public sealed record ChatTurn
 {

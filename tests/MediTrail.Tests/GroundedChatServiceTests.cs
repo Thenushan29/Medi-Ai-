@@ -390,6 +390,64 @@ public partial class GroundedChatServiceTests : IDisposable
         Assert.True(answer.ConsultProfessional);
     }
 
+    /// <summary>
+    /// Closing and reopening the drawer lost the conversation, which now also loses the follow-up
+    /// context Task 2 added. The whole answer is stored, not just its text — an answer replayed
+    /// without its citations or its consult flag is a weaker claim than the one first shown
+    /// (Principle 3).
+    /// </summary>
+    [Fact]
+    public async Task StoresACompletedTurnAndReplaysItWithItsEvidence()
+    {
+        var (patientId, documentId) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+
+        await _db.SaveChangesAsync();
+
+        await Service().AskAsync(patientId, "Anything I should not be taking?");
+
+        var stored = Assert.Single(await Service().GetHistoryAsync(patientId));
+
+        Assert.Equal("Anything I should not be taking?", stored.Question);
+        Assert.True(stored.Answer.FoundInDocuments);
+        Assert.Contains(documentId, stored.Answer.Citations);
+        Assert.True(stored.Answer.ConsultProfessional);
+    }
+
+    /// <summary>Oldest first, so a replayed drawer reads in the order it was spoken.</summary>
+    [Fact]
+    public async Task ReplaysTheConversationInOrder()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+
+        await _db.SaveChangesAsync();
+
+        var service = Service();
+        await service.AskAsync(patientId, "First question");
+        await service.AskAsync(patientId, "Second question");
+
+        var stored = await service.GetHistoryAsync(patientId);
+
+        Assert.Equal(["First question", "Second question"], stored.Select(m => m.Question));
+    }
+
+    /// <summary>One patient's conversation never appears in another's drawer.</summary>
+    [Fact]
+    public async Task KeepsConversationsScopedToTheirPatient()
+    {
+        var (first, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+        var (second, _) = SeedWarningAndMatchingMedication(
+            substance: "ibuprofen", warning: "Avoid ibuprofen.");
+
+        await _db.SaveChangesAsync();
+
+        await Service().AskAsync(first, "Only asked about the first patient");
+
+        Assert.Empty(await Service().GetHistoryAsync(second));
+    }
+
     private (Guid PatientId, Guid DocumentId) SeedWarningAndMatchingMedication(
         string substance, string warning, bool isDocumentWarning = true)
     {

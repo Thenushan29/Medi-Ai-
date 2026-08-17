@@ -177,6 +177,26 @@ export class ChatDrawerComponent {
   protected readonly turns = signal<Turn[]>([]);
   protected readonly busy = signal(false);
 
+  constructor() {
+    // The drawer is created fresh each time it opens, so this restores the conversation rather
+    // than showing a blank panel. A failure here leaves an empty drawer, which is exactly the
+    // behaviour before it was stored — never an error banner over a working chat.
+    queueMicrotask(() =>
+      this.api.getChatHistory(this.patientId()).subscribe({
+        next: stored =>
+          this.turns.update(list => [
+            ...stored.map(message => ({
+              question: message.question,
+              answer: message.answer,
+              pending: false
+            })),
+            ...list
+          ]),
+        error: () => undefined
+      })
+    );
+  }
+
   /**
    * Which version of the answer to show.
    *

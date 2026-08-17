@@ -24,6 +24,9 @@ public interface IGroundedChatService
         string question,
         IReadOnlyList<ChatTurn>? history = null,
         CancellationToken ct = default);
+
+    /// <summary>The stored conversation, oldest first, so a reopened drawer resumes where it was.</summary>
+    Task<IReadOnlyList<ChatMessageDto>> GetHistoryAsync(Guid patientId, CancellationToken ct = default);
 }
 
 public sealed partial class GroundedChatService(
@@ -129,7 +132,7 @@ public sealed partial class GroundedChatService(
                 ? Math.Clamp(answer.Confidence, 0, 100)
                 : 100;
 
-            return new ChatAnswerDto
+            var result = new ChatAnswerDto
             {
                 AnswerEn = answer.AnswerEn ?? "I could not find that in your uploaded documents.",
                 AnswerTa = answer.AnswerTa,
@@ -144,11 +147,75 @@ public sealed partial class GroundedChatService(
                 ConsultProfessional = answer.ConsultProfessional || safetyRefusal || confidence < 50,
                 FoundInDocuments = found
             };
+
+            await RememberAsync(patientId, question, result, ct);
+
+            return result;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Chat failed for {PatientId}", patientId);
             return Unavailable("I could not reach the question service. Please try again in a moment.");
+        }
+    }
+
+    public async Task<IReadOnlyList<ChatMessageDto>> GetHistoryAsync(
+        Guid patientId, CancellationToken ct = default) =>
+        await db.ChatMessages
+            .AsNoTracking()
+            .Where(m => m.PatientId == patientId)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new ChatMessageDto
+            {
+                Question = m.Question,
+                Answer = new ChatAnswerDto
+                {
+                    AnswerEn = m.AnswerEn,
+                    AnswerTa = m.AnswerTa,
+                    AnswerTanglish = m.AnswerTanglish,
+                    AskedLanguage = m.AskedLanguage,
+                    Citations = m.Citations,
+                    Confidence = m.Confidence,
+                    SafetyRefusal = m.SafetyRefusal,
+                    ConsultProfessional = m.ConsultProfessional,
+                    FoundInDocuments = m.FoundInDocuments
+                },
+                AskedAt = m.CreatedAt
+            })
+            .ToListAsync(ct);
+
+    /// <summary>
+    /// Stores the completed turn so a reopened drawer is not blank.
+    ///
+    /// Never allowed to cost the user their answer: the answer has already been produced and is
+    /// about to be returned, and failing the request because a history row could not be written
+    /// would trade something they asked for against something they did not.
+    /// </summary>
+    private async Task RememberAsync(
+        Guid patientId, string question, ChatAnswerDto answer, CancellationToken ct)
+    {
+        try
+        {
+            db.ChatMessages.Add(new ChatMessage
+            {
+                PatientId = patientId,
+                Question = question.Trim(),
+                AnswerEn = answer.AnswerEn,
+                AnswerTa = answer.AnswerTa,
+                AnswerTanglish = answer.AnswerTanglish,
+                AskedLanguage = answer.AskedLanguage,
+                Citations = [.. answer.Citations],
+                Confidence = answer.Confidence,
+                SafetyRefusal = answer.SafetyRefusal,
+                ConsultProfessional = answer.ConsultProfessional,
+                FoundInDocuments = answer.FoundInDocuments
+            });
+
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Could not store the chat turn for {PatientId}", patientId);
         }
     }
 

@@ -281,10 +281,17 @@ export interface LabTrendPoint {
   documentId: string;
 }
 
-/** One completed exchange, sent back so a follow-up can resolve against it. Never persisted. */
+/** One completed exchange, sent back so a follow-up can resolve against it. */
 export interface ChatTurn {
   question: string;
   answer: string;
+}
+
+/** A stored exchange, replayed into the drawer when it reopens. */
+export interface ChatMessage {
+  question: string;
+  answer: ChatAnswer;
+  askedAt: string;
 }
 
 /** How the question was written. Tanglish is Tamil in Latin script — its own answer language. */
