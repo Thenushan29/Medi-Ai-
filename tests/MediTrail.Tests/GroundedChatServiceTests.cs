@@ -340,6 +340,56 @@ public partial class GroundedChatServiceTests : IDisposable
         Assert.Empty(answer.Citations);
     }
 
+    /// <summary>
+    /// The same question in two languages returned "not found, Low · 0%" and "not found, High ·
+    /// 100%". Both readings are defensible; a number that varies run to run is not. The service
+    /// decides it now, so the model cannot.
+    /// </summary>
+    [Fact]
+    public async Task ConfidenceOnANotFoundAnswerIsFixedRegardlessOfWhatTheModelSaid()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Take after food.");
+
+        await _db.SaveChangesAsync();
+
+        _db.Allergies.RemoveRange(await _db.Allergies.ToListAsync());
+        await _db.SaveChangesAsync();
+
+        // The stub reports confidence 10 alongside its not-found answer.
+        var answer = await Service().AskAsync(patientId, "What was my blood pressure in 2020?");
+
+        Assert.False(answer.FoundInDocuments);
+        Assert.Equal(100, answer.Confidence);
+
+        // 100 must not drag the consult banner on: "I could not find that" is not a risk statement.
+        Assert.False(answer.ConsultProfessional);
+    }
+
+    /// <summary>
+    /// "intha marunthu safe ah?" was refused and then badged "not found in your documents", which
+    /// tells the reader their records are incomplete when the truth is that MediTrail will not
+    /// judge safety (§5.3). The two are reported separately now.
+    /// </summary>
+    [Fact]
+    public async Task ASafetyRefusalIsNotReportedAsAMissingFact()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+
+        await _db.SaveChangesAsync();
+
+        _ai.RefuseOnSafety = true;
+
+        var answer = await Service().AskAsync(patientId, "intha marunthu safe ah?");
+
+        Assert.True(answer.SafetyRefusal);
+        Assert.False(answer.FoundInDocuments);
+
+        // A refusal about risk always carries the consult banner (FR-7.6).
+        Assert.True(answer.ConsultProfessional);
+    }
+
     private (Guid PatientId, Guid DocumentId) SeedWarningAndMatchingMedication(
         string substance, string warning, bool isDocumentWarning = true)
     {
@@ -396,10 +446,33 @@ public partial class GroundedChatServiceTests : IDisposable
     {
         public string Prompt { get; private set; } = "(never called)";
 
+        /// <summary>Stands in for the model declining to judge safety, as the prompt requires.</summary>
+        public bool RefuseOnSafety { get; set; }
+
         public Task<AiCompletion> CompleteAsync(
             string systemPrompt, string userMessage, string? model = null, CancellationToken ct = default)
         {
             Prompt = systemPrompt;
+
+            if (RefuseOnSafety)
+            {
+                return Task.FromResult(new AiCompletion
+                {
+                    Content = """
+                    {
+                      "answerEn": "I cannot tell you whether a medicine is safe for you. Your records show what was prescribed; a pharmacist can judge it.",
+                      "answerTa": "…",
+                      "citations": [],
+                      "confidence": 100,
+                      "safetyRefusal": true,
+                      "consultProfessional": true,
+                      "foundInDocuments": false
+                    }
+                    """,
+                    Model = "stub",
+                    LatencyMs = 1
+                });
+            }
 
             var medications = MedicationLine().Matches(systemPrompt)
                 .Select(m => m.Groups[1].Value.Trim())

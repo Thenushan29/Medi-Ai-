@@ -140,7 +140,25 @@ public sealed record ChatAnswerDto
     public required string AnswerEn { get; init; }
     public string? AnswerTa { get; init; }
     public required IReadOnlyList<Guid> Citations { get; init; }
+
+    /// <summary>
+    /// How well the record supports the answer, 0–100.
+    ///
+    /// When <see cref="FoundInDocuments"/> is false this is fixed at 100 by the service and means
+    /// something different: certainty that the record does not contain it, having read all of it.
+    /// The interface does not show a trust percentage on those answers — see
+    /// <see cref="SafetyRefusal"/> for why a number there was misleading either way.
+    /// </summary>
     public required int Confidence { get; init; }
+
+    /// <summary>
+    /// True when the answer declined to judge whether something is safe, rather than failing to
+    /// find it. "Is this medicine safe?" is a question MediTrail must never answer (§5.3) — that
+    /// is a refusal on principle, not an absent fact, and badging it "not found in your documents"
+    /// told the user their records were incomplete when they were not.
+    /// </summary>
+    public required bool SafetyRefusal { get; init; }
+
     public required bool ConsultProfessional { get; init; }
     public required bool FoundInDocuments { get; init; }
 }

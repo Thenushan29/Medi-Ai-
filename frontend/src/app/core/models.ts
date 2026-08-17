@@ -291,7 +291,10 @@ export interface ChatAnswer {
   answerEn: string;
   answerTa?: string;
   citations: string[];
+  /** Only meaningful when `foundInDocuments` is true; fixed by the server otherwise. */
   confidence: number;
+  /** Declined to judge safety — a refusal on principle, not an absent fact. */
+  safetyRefusal: boolean;
   consultProfessional: boolean;
   foundInDocuments: boolean;
 }

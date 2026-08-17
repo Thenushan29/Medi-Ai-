@@ -84,12 +84,19 @@ const SUGGESTIONS = [
                   </p>
 
                   <div class="mt-3 flex flex-wrap items-center gap-2">
-                    <mt-confidence [score]="answer.confidence" />
-
-                    @if (!answer.foundInDocuments) {
-                      <span class="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500">
-                        not found in your documents
+                    <!-- The confidence badge says how far to trust what the answer asserts. An
+                         answer that asserts nothing has no such number, and showing one invited
+                         the question of what "not found · 100%" was supposed to mean. -->
+                    @if (answer.safetyRefusal) {
+                      <span class="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
+                        MediTrail cannot judge whether a medicine is safe for you
                       </span>
+                    } @else if (!answer.foundInDocuments) {
+                      <span class="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500">
+                        nothing in your documents covers this
+                      </span>
+                    } @else {
+                      <mt-confidence [score]="answer.confidence" />
                     }
                   </div>
 

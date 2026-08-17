@@ -67,6 +67,7 @@ public sealed partial class GroundedChatService(
                 AnswerEn = "There is nothing in your records yet. Upload some documents and I can answer questions about them.",
                 Citations = [],
                 Confidence = 100,
+                SafetyRefusal = false,
                 ConsultProfessional = false,
                 FoundInDocuments = false
             };
@@ -111,7 +112,21 @@ public sealed partial class GroundedChatService(
                 .Distinct()
                 .ToList();
 
-            var confidence = Math.Clamp(answer.Confidence, 0, 100);
+            // A refusal to judge safety is not an absent fact. It never counts as "found", and it
+            // is never presented as a gap in the person's records.
+            var safetyRefusal = answer.SafetyRefusal;
+            var found = answer.FoundInDocuments && !safetyRefusal;
+
+            // Decided here, not by the model. The same question asked twice returned "Low · 0%"
+            // once and "High · 100%" the other time, because both readings are defensible and
+            // nothing pinned one down. Fixed at 100 with a stated meaning: having read the whole
+            // record, this is certainly not in it. The interface does not show it as a trust
+            // percentage — a number against "I could not find that" measures nothing the reader
+            // wants — but the field has to hold something, and a value that varies run to run is
+            // the one thing it must not hold.
+            var confidence = found
+                ? Math.Clamp(answer.Confidence, 0, 100)
+                : 100;
 
             return new ChatAnswerDto
             {
@@ -119,9 +134,12 @@ public sealed partial class GroundedChatService(
                 AnswerTa = answer.AnswerTa,
                 Citations = citations,
                 Confidence = confidence,
-                // Forced on for low confidence regardless of what the model decided (§11.4, FR-7.6).
-                ConsultProfessional = answer.ConsultProfessional || confidence < 50,
-                FoundInDocuments = answer.FoundInDocuments
+                SafetyRefusal = safetyRefusal,
+                // Forced on for low confidence regardless of what the model decided (§11.4,
+                // FR-7.6), and always on a safety refusal — the question was about risk, and the
+                // answer is that a person has to judge it.
+                ConsultProfessional = answer.ConsultProfessional || safetyRefusal || confidence < 50,
+                FoundInDocuments = found
             };
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -347,13 +365,18 @@ public sealed partial class GroundedChatService(
     {
         AnswerEn = message,
         Citations = [],
+        // A service failure is the one case where the number genuinely means "no support at all":
+        // nothing was read, so nothing is known either way. Distinct from a not-found, which has
+        // read the whole record.
         Confidence = 0,
+        SafetyRefusal = false,
         ConsultProfessional = true,
         FoundInDocuments = false
     };
 
     private sealed record ChatResponse
     {
+        [JsonPropertyName("safetyRefusal")] public bool SafetyRefusal { get; init; }
         [JsonPropertyName("answerEn")] public string? AnswerEn { get; init; }
         [JsonPropertyName("answerTa")] public string? AnswerTa { get; init; }
         [JsonPropertyName("citations")] public IReadOnlyList<string> Citations { get; init; } = [];
