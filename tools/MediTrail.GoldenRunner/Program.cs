@@ -61,6 +61,10 @@ var services = new ServiceCollection();
 services.AddLogging(b => b.AddSimpleConsole(o => o.SingleLine = true).SetMinimumLevel(LogLevel.Warning));
 services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
 services.AddSingleton<IPromptLibrary, PromptLibrary>();
+// VisionDocumentExtractor took a dependency on this when PDF support landed (FR-2.7) and this
+// registration was not added with it, so the accuracy gate threw at startup before reading a
+// single document. §18.4 requires this run on every prompt change; it could not run at all.
+services.AddSingleton<IPdfRenderer, PdfRenderer>();
 // Same configuration path as the API — measuring against different settings than production
 // would make the accuracy figure meaningless.
 services.AddHttpClient<IAiClient, OpenAiCompatibleClient>((provider, client) =>
