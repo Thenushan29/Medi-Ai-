@@ -1,13 +1,15 @@
 # Database
 
-Supabase PostgreSQL. Six tables (PRD §12.3) plus one derived view.
+Supabase PostgreSQL. Seven tables (PRD §12.3 plus `diagnoses`, which §12.3 lists as deferred and
+additive — added when the grounded chat could not answer "what was I given for malaria?" on a
+document that prints the word) and one derived view.
 
 ## Apply
 
 Run in order in the Supabase SQL editor (or via `psql`):
 
-1. `01_schema.sql` — generated from the EF Core migration, idempotent. Creates `patients`,
-   `documents`, `medications`, `lab_results`, `allergies`, `alerts`.
+1. `01_schema.sql` — generated from the EF Core migrations, idempotent. Creates `patients`,
+   `documents`, `medications`, `diagnoses`, `lab_results`, `allergies`, `alerts`.
 2. `02_views.sql` — `v_patient_timeline`. Re-runnable.
 
 ```bash

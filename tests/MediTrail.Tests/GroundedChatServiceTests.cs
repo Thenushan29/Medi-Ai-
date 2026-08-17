@@ -184,6 +184,51 @@ public partial class GroundedChatServiceTests : IDisposable
         new(_db, new PromptLibrary(NullLogger<PromptLibrary>.Instance), new SingleService(_ai),
             NullLogger<GroundedChatService>.Instance);
 
+    /// <summary>
+    /// The reported defect, on patient_x_year1_1: the page prints "Diagnosis: MALARIA" directly
+    /// above four drugs, and "what medicines was I given for malaria?" answered "there is no
+    /// mention of any medicines given specifically for malaria". The model was right about what it
+    /// was handed — diagnoses were extracted, then dropped at the merge, so the word never reached
+    /// the record.
+    ///
+    /// Asserted on the record text rather than on an answer: what is under test is the context the
+    /// pipeline assembles, and the condition has to sit under the same document heading as the
+    /// drugs for the model to join them.
+    /// </summary>
+    [Fact]
+    public async Task RecordCarriesADiagnosisAlongsideThatVisitsMedications()
+    {
+        var (patientId, documentId) = SeedWarningAndMatchingMedication(
+            substance: "clarithromycin", warning: "Complete the full course.");
+
+        _db.Diagnoses.Add(new Diagnosis
+        {
+            PatientId = patientId,
+            DocumentId = documentId,
+            Text = "Malaria",
+            SourceText = "* MALARIA",
+            Confidence = 90
+        });
+
+        await _db.SaveChangesAsync();
+
+        await Service().AskAsync(patientId, "What medicines was I given for malaria?");
+
+        var record = _ai.Prompt;
+
+        Assert.Contains("Malaria", record, StringComparison.Ordinal);
+        Assert.Contains("* MALARIA", record, StringComparison.Ordinal);
+
+        // Under the document heading, and above that document's medications — adjacency is the
+        // whole point, not mere presence somewhere in the prompt.
+        var heading = record.IndexOf($"## Document id: {documentId}", StringComparison.Ordinal);
+        var diagnosis = record.IndexOf("Diagnosis recorded on this document", StringComparison.Ordinal);
+        var medication = record.IndexOf("- Medication: clarithromycin", StringComparison.Ordinal);
+
+        Assert.True(heading >= 0 && diagnosis > heading && medication > diagnosis,
+            "The diagnosis must sit under its document heading and before that visit's medications.");
+    }
+
     private (Guid PatientId, Guid DocumentId) SeedWarningAndMatchingMedication(
         string substance, string warning, bool isDocumentWarning = true)
     {

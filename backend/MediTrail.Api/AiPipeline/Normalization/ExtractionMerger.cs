@@ -28,6 +28,7 @@ public sealed class ExtractionMerger(
     {
         var document = await db.Documents
             .Include(d => d.Medications)
+            .Include(d => d.Diagnoses)
             .Include(d => d.LabResults)
             .Include(d => d.Allergies)
             .FirstOrDefaultAsync(d => d.Id == documentId, ct);
@@ -48,6 +49,7 @@ public sealed class ExtractionMerger(
         // Idempotent: re-merging replaces rather than duplicates, so the pipeline can be re-run
         // after a prompt change without cleaning up first.
         db.Medications.RemoveRange(document.Medications);
+        db.Diagnoses.RemoveRange(document.Diagnoses);
         db.LabResults.RemoveRange(document.LabResults);
         db.Allergies.RemoveRange(document.Allergies);
 
@@ -64,18 +66,21 @@ public sealed class ExtractionMerger(
         // entity by fixup — a non-default key reads as "already exists", so it issues an UPDATE
         // against a row that was never inserted. Adding explicitly states the intent.
         var medications = BuildMedications(document, extraction);
+        var diagnoses = BuildDiagnoses(document, extraction);
         var labResults = BuildLabResults(document, extraction);
         var allergies = BuildAllergiesAndWarnings(document, extraction);
 
         db.Medications.AddRange(medications);
+        db.Diagnoses.AddRange(diagnoses);
         db.LabResults.AddRange(labResults);
         db.Allergies.AddRange(allergies);
 
         await db.SaveChangesAsync(ct);
 
         logger.LogInformation(
-            "Merged {DocumentId}: {Medications} medications, {Labs} lab results, {Allergies} allergies/warnings",
-            documentId, medications.Count, labResults.Count, allergies.Count);
+            "Merged {DocumentId}: {Medications} medications, {Diagnoses} diagnoses, " +
+            "{Labs} lab results, {Allergies} allergies/warnings",
+            documentId, medications.Count, diagnoses.Count, labResults.Count, allergies.Count);
     }
 
     private static List<Medication> BuildMedications(Document document, DocumentExtraction extraction)
@@ -144,6 +149,39 @@ public sealed class ExtractionMerger(
         }
 
         return medications;
+    }
+
+    /// <summary>
+    /// Conditions named on the page, stored as printed.
+    ///
+    /// Deliberately no normalizer: there is no diagnosis equivalent of
+    /// <see cref="DrugNameNormalizer"/> here and there should not be one in Round 1. Mapping
+    /// "Fever with chills" to a coded condition, or a condition to the drugs that usually treat it,
+    /// would be the product reasoning about a diagnosis rather than reporting one — the line §5.3
+    /// draws. The chat model does the joining, from text that is verifiably on the document.
+    /// </summary>
+    private static List<Diagnosis> BuildDiagnoses(Document document, DocumentExtraction extraction)
+    {
+        var diagnoses = new List<Diagnosis>();
+
+        foreach (var source in extraction.Diagnoses)
+        {
+            // Nothing to record when the model named no condition; a row carrying only a
+            // sourceText would show as a blank entry on the timeline.
+            var text = Trim(source.Text);
+            if (text is null) continue;
+
+            diagnoses.Add(new Diagnosis
+            {
+                PatientId = document.PatientId,
+                DocumentId = document.Id,
+                Text = text,
+                SourceText = Trim(source.SourceText),
+                Confidence = source.Confidence
+            });
+        }
+
+        return diagnoses;
     }
 
     private static List<LabResult> BuildLabResults(Document document, DocumentExtraction extraction)

@@ -13,6 +13,7 @@ public class MediTrailDbContext(DbContextOptions<MediTrailDbContext> options) : 
     public DbSet<Patient> Patients => Set<Patient>();
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<Medication> Medications => Set<Medication>();
+    public DbSet<Diagnosis> Diagnoses => Set<Diagnosis>();
     public DbSet<LabResult> LabResults => Set<LabResult>();
     public DbSet<Allergy> Allergies => Set<Allergy>();
     public DbSet<Alert> Alerts => Set<Alert>();
@@ -81,6 +82,20 @@ public class MediTrailDbContext(DbContextOptions<MediTrailDbContext> options) : 
                 .OnDelete(DeleteBehavior.Cascade);
 
             e.HasIndex(x => new { x.PatientId, x.GenericName });
+        });
+
+        b.Entity<Diagnosis>(e =>
+        {
+            e.ToTable("diagnoses");
+            e.Property(x => x.Text).HasMaxLength(500);
+
+            e.HasOne(x => x.Document)
+                .WithMany(d => d.Diagnoses)
+                .HasForeignKey(x => x.DocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Read per document when the record is built for chat, and per patient nowhere else.
+            e.HasIndex(x => x.PatientId);
         });
 
         b.Entity<LabResult>(e =>

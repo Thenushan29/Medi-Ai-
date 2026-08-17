@@ -246,3 +246,45 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260817044923_AddDiagnoses') THEN
+    CREATE TABLE diagnoses (
+        id uuid NOT NULL,
+        patient_id uuid NOT NULL,
+        document_id uuid NOT NULL,
+        text character varying(500),
+        source_text text,
+        confidence integer,
+        created_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_diagnoses PRIMARY KEY (id),
+        CONSTRAINT fk_diagnoses_documents_document_id FOREIGN KEY (document_id) REFERENCES documents (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260817044923_AddDiagnoses') THEN
+    CREATE INDEX ix_diagnoses_document_id ON diagnoses (document_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260817044923_AddDiagnoses') THEN
+    CREATE INDEX ix_diagnoses_patient_id ON diagnoses (patient_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260817044923_AddDiagnoses') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260817044923_AddDiagnoses', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+

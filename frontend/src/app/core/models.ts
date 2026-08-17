@@ -113,6 +113,8 @@ export interface TimelineEntry {
   failureReason?: string;
   overallConfidence?: number;
   legibilityNotes?: string;
+  /** Conditions named on the document, as printed. Transcribed, never MediTrail's conclusion. */
+  diagnoses: string[];
   medicationCount: number;
   labResultCount: number;
   outOfRangeCount: number;

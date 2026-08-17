@@ -183,6 +183,18 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
                             {{ entry.failureReason || 'This document could not be read.' }}
                           </p>
                         } @else {
+                          <!-- What the visit was for, as written on the page. Worded "recorded on
+                               this document" so it reads as transcription, which is all it is —
+                               MediTrail never states a diagnosis of its own (§17.1). -->
+                          @if (entry.diagnoses.length > 0) {
+                            <p class="mt-3 text-xs text-slate-600">
+                              <span class="text-slate-400">Recorded on this document:</span>
+                              @for (diagnosis of entry.diagnoses; track diagnosis) {
+                                <span class="ml-1 rounded bg-slate-100 px-1.5 py-0.5 font-medium">{{ diagnosis }}</span>
+                              }
+                            </p>
+                          }
+
                           <div class="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
                             <span>{{ entry.medicationCount }} medication{{ entry.medicationCount === 1 ? '' : 's' }}</span>
                             <span>{{ entry.labResultCount }} lab result{{ entry.labResultCount === 1 ? '' : 's' }}</span>

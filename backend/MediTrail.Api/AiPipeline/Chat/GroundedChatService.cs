@@ -120,6 +120,7 @@ public sealed partial class GroundedChatService(
             .AsNoTracking()
             .Where(d => d.PatientId == patientId)
             .Include(d => d.Medications)
+            .Include(d => d.Diagnoses)
             .Include(d => d.LabResults)
             .OrderBy(d => d.DocumentDate == null)
             .ThenBy(d => d.DocumentDate)
@@ -164,6 +165,17 @@ public sealed partial class GroundedChatService(
             {
                 // Told to the model so it can qualify an answer that rests on a weak reading.
                 builder.AppendLine($"NOTE: this document read poorly (confidence {document.OverallConfidence}).");
+            }
+
+            // Before the medications, so the condition and the drugs prescribed for it sit
+            // together under one document heading. That adjacency is the whole point: "what was I
+            // given for malaria?" is answerable only if the word MALARIA and the four drugs
+            // printed beneath it are visibly part of the same visit (FR-7.2).
+            foreach (var d in document.Diagnoses)
+            {
+                builder.Append("- Diagnosis recorded on this document: ").Append(OneLine(d.Text));
+                if (d.SourceText is { } source) builder.Append($" (printed as \"{OneLine(source)}\")");
+                builder.AppendLine();
             }
 
             foreach (var m in document.Medications)

@@ -215,6 +215,10 @@ public sealed class DocumentService(
                 d.FailureReason,
                 d.OverallConfidence,
                 d.LegibilityNotes,
+                Diagnoses = d.Diagnoses
+                    .Where(x => x.Text != null)
+                    .Select(x => x.Text!)
+                    .ToList(),
                 MedicationCount = d.Medications.Count,
                 LabResultCount = d.LabResults.Count,
                 OutOfRangeCount = d.LabResults.Count(l => l.IsOutOfRange),
@@ -236,6 +240,7 @@ public sealed class DocumentService(
             FailureReason = r.FailureReason,
             OverallConfidence = r.OverallConfidence,
             LegibilityNotes = r.LegibilityNotes,
+            Diagnoses = r.Diagnoses,
             MedicationCount = r.MedicationCount,
             LabResultCount = r.LabResultCount,
             OutOfRangeCount = r.OutOfRangeCount,

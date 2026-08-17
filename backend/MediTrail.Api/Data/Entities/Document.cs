@@ -58,6 +58,7 @@ public class Document
     public DateTimeOffset? ExtractedAt { get; set; }
 
     public ICollection<Medication> Medications { get; set; } = [];
+    public ICollection<Diagnosis> Diagnoses { get; set; } = [];
     public ICollection<LabResult> LabResults { get; set; } = [];
     public ICollection<Allergy> Allergies { get; set; } = [];
 }

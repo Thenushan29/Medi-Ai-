@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using MediTrail.Api.AiPipeline.Normalization;
 using MediTrail.Api.Data;
@@ -67,6 +68,103 @@ public class ExtractionMergerTests : IDisposable
         // fallback rather than being lost (FR-4.6).
         Assert.Equal(Sentence, warning.SourceText);
     }
+
+    /// <summary>
+    /// Diagnoses were extracted into the canonical schema and then dropped here, so the word
+    /// "MALARIA" printed above four drugs never reached any downstream stage. Stored exactly as
+    /// printed — no coding, no mapping to the drugs that usually treat it (§5.3).
+    /// </summary>
+    [Fact]
+    public async Task PersistsDiagnosesAsPrinted()
+    {
+        var documentId = AddDocument("""
+        {
+          "diagnoses": [
+            { "text": "Malaria", "sourceText": "* MALARIA", "confidence": 95 },
+            { "text": "Fever with chills", "sourceText": "* FEVER WITH CHILLS" }
+          ]
+        }
+        """);
+
+        await _merger.MergeAsync(documentId);
+
+        var diagnoses = await _db.Diagnoses.OrderBy(d => d.Text).ToListAsync();
+
+        Assert.Equal(2, diagnoses.Count);
+        Assert.Equal("Fever with chills", diagnoses[0].Text);
+        Assert.Equal("Malaria", diagnoses[1].Text);
+        Assert.Equal("* MALARIA", diagnoses[1].SourceText);
+        Assert.Equal(95, diagnoses[1].Confidence);
+
+        // Evidence linking is not optional on any child row (§12.3).
+        Assert.All(diagnoses, d => Assert.Equal(documentId, d.DocumentId));
+    }
+
+    /// <summary>
+    /// Re-merging replaces rather than duplicates, the same as every other row type — a prompt
+    /// change can be re-run over stored extractions without cleaning up first.
+    /// </summary>
+    [Fact]
+    public async Task ReMergingReplacesDiagnosesRatherThanDuplicatingThem()
+    {
+        var documentId = AddDocument("""
+        { "diagnoses": [ { "text": "Jaundice", "sourceText": "Diagnosis: Jaundice" } ] }
+        """);
+
+        await _merger.MergeAsync(documentId);
+        await _merger.MergeAsync(documentId);
+
+        var diagnosis = Assert.Single(await _db.Diagnoses.ToListAsync());
+        Assert.Equal("Jaundice", diagnosis.Text);
+    }
+
+    /// <summary>An entry naming no condition is not a row — it would show as a blank chip.</summary>
+    [Fact]
+    public async Task SkipsADiagnosisEntryWithNoText()
+    {
+        var documentId = AddDocument("""
+        { "diagnoses": [ { "text": null, "sourceText": "illegible" }, { "text": "  " } ] }
+        """);
+
+        await _merger.MergeAsync(documentId);
+
+        Assert.Empty(await _db.Diagnoses.ToListAsync());
+    }
+
+    /// <summary>
+    /// The real hand-written label for `patient_x_year1_1`, merged as the pipeline would merge a
+    /// stored extraction of it. The unit tests above use JSON written to prove a point; this one
+    /// uses the file the golden gate scores against, so a schema drift between the label format
+    /// and the merge shows up here rather than in a chat answer.
+    ///
+    /// This is the document behind the reported defect: `Diagnosis: MALARIA` above four drugs.
+    /// </summary>
+    [Fact]
+    public async Task GoldenLabelWithADiagnosisSurvivesTheRoundTrip()
+    {
+        var label = Path.Combine(RepositoryRoot(), "dataset", "golden", "patient_x_year1_1.json");
+        Assert.True(File.Exists(label), $"Golden label missing at {label}. It is committed, not gitignored.");
+
+        var documentId = AddDocument(await File.ReadAllTextAsync(label));
+
+        await _merger.MergeAsync(documentId);
+
+        var diagnosis = Assert.Single(await _db.Diagnoses.ToListAsync());
+        Assert.Equal("Malaria", diagnosis.Text);
+        Assert.Equal("* MALARIA", diagnosis.SourceText);
+
+        // The four drugs printed beneath it come through the same merge, which is what makes the
+        // question answerable at all.
+        Assert.Equal(4, await _db.Medications.CountAsync());
+    }
+
+    /// <summary>
+    /// Anchored on this file's own path rather than the build output: the test assemblies are
+    /// built to a separate artifacts directory when the API's bin is locked, and walking up from
+    /// AppContext.BaseDirectory then leaves the repository entirely.
+    /// </summary>
+    private static string RepositoryRoot([CallerFilePath] string thisFile = "") =>
+        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(thisFile)!, "..", ".."));
 
     /// <summary>Two substances in one warning: both named, and neither collapses into a single generic.</summary>
     [Fact]

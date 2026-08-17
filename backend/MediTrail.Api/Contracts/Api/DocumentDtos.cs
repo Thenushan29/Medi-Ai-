@@ -69,6 +69,12 @@ public sealed record TimelineEntryDto
     public string? FailureReason { get; init; }
     public int? OverallConfidence { get; init; }
     public string? LegibilityNotes { get; init; }
+    /// <summary>
+    /// Conditions named on the document, as printed. Carried in full rather than as a count —
+    /// a visit is identified by what it was for, and "Malaria" says more about a card than "1
+    /// diagnosis" does. Transcribed text, never a conclusion MediTrail drew (§17.1).
+    /// </summary>
+    public required IReadOnlyList<string> Diagnoses { get; init; }
     public required int MedicationCount { get; init; }
     public required int LabResultCount { get; init; }
     public required int OutOfRangeCount { get; init; }
