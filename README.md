@@ -32,10 +32,11 @@ tools/GoldenRunner/      Extraction accuracy against hand-labelled truth (§18.1
   Data/                  EF Core entities, DbContext, migrations
 frontend/                Angular 22 standalone + Tailwind v4
   src/app/core/          API client, models, language service
-  src/app/features/      Patients, upload, processing, dashboard, evidence
+  src/app/features/      Patients, upload, processing, dashboard, evidence, doctor-search
   src/app/shared/        Disclaimer, confidence badge
 db/                      Schema SQL (generated) + views
-docs/                    PRD
+docs/                    PRD and Round 2 plan
+scripts/                 Supabase setup; doctor-search cache pre-warm
 dataset/                 Evaluation documents (gitignored — PHI) and golden labels
 ```
 
@@ -105,6 +106,81 @@ cd frontend && npm start
 
 ---
 
+## Doctor recommendation (Round 2)
+
+When an alert is **Red**, **Amber**, consult-flagged, or under 50% confidence, the dashboard can
+open a three-step drawer: confirm a specialty, give a town (or device coordinates), then list
+**nearby facilities from public map data**. It is not a referral, not an SLMC check, and not a
+statement about the patient.
+
+The feature is gated by `Features:DoctorRecommendation` and defaults **off**. One flip returns the
+app to the Round 1 surface. `GET /api/health/providers` is not gated — it pings Overpass, Nominatim,
+and RxNav so a venue check still works when the drawer is dark.
+
+```bash
+cd backend/MediTrail.Api
+dotnet user-secrets set "Features:DoctorRecommendation" "true"
+```
+
+Or set `"DoctorRecommendation": true` under `Features` in the API configuration. Then restart the
+API. If the flag is off, doctor-search routes return 404 with that message; nothing is invented.
+
+Before a live demo, warm the Overpass/Nominatim cache (counts only — the script never prints a
+clinic name):
+
+```powershell
+./scripts/prewarm-doctor-cache.ps1
+# ./scripts/prewarm-doctor-cache.ps1 -BaseUrl http://localhost:5000 -PatientId <guid>
+```
+
+### What each field is, and what shows when it is missing
+
+| Displayed field | Source | When missing |
+|---|---|---|
+| Suggested specialty | Deterministic ladder: user override → alert type → NLM RxClass MED-RT `may_treat` → ATC/EPC → lab keys → general practice. The model never picks it. | General practice, with the reason string from the rung that fired |
+| “Why this specialty?” chips | NLM RxClass class pages (`mor.nlm.nih.gov`) | No chips. Disease-class names here are **drug-class information**, not a statement about the patient |
+| Facility name | OpenStreetMap `name` | The OSM facility type (`hospital`, `clinic`, …), else **Not listed** |
+| Category | OSM `amenity` or `healthcare` | **Not listed** |
+| Specialty tag | OSM `healthcare:speciality` (British spellings) | **Not listed** |
+| Address | OSM `addr:*` tags | **Not listed** |
+| Distance | Haversine from the search origin, labelled **straight-line** | Always present on a result row |
+| Phone | OSM `phone` / `contact:phone` | **Not listed** |
+| Website | OSM `website` / `contact:website` | **Not listed** |
+| Hours | OSM `opening_hours`, shown **raw** | **Not listed** |
+| Availability badge | Heuristic on `opening_hours` (`match` / `unknown` / `indeterminate` / `no_match`) | **Hours unknown** |
+| Why ranked | Transparent score (specialty tag, type, distance, contact, hours). Never a rating. | Reasons array is never empty |
+| Open in map | OSM object URL, or a lat/lng pin if the object URL is absent | Link still opens OSM at the coordinates |
+| Source + fetched time | Provider name + `fetched_at` from the live call or the labelled cache | Time shows **Not listed** rather than pretending it is live |
+| Rating | **OSM has no ratings.** This UI does not render stars. | Never shown. Never `0.0`. |
+| SLMC registration | Not checked. Footer deep-links the [SLMC public register](https://slmc.gov.lk/public/en/services/public). | No “SLMC Verified” badge |
+
+Empty, failed, and unknown-place are three different API statuses and three different screens.
+Empty renders **zero** cards. Failed shows nothing unverified unless an *expired* cache row exists,
+in which case those rows are shown with a **stale** badge and the original `fetched_at`.
+
+### Limitations
+
+- OpenStreetMap has **no ratings**.
+- OSM maps **facilities**, not individual practitioners.
+- Coverage varies outside major cities.
+- MediTrail does **not** verify SLMC registration.
+- Distance is straight-line, not road distance or travel time.
+- RxClass `may_treat` classes are not a diagnosis.
+
+### Attributions
+
+```
+© OpenStreetMap contributors — data available under the Open Database License (ODbL).
+Geocoding by Nominatim, © OpenStreetMap contributors.
+
+This product uses publicly available data from the U.S. National Library of Medicine
+(NLM), National Institutes of Health, Department of Health and Human Services; NLM is
+not responsible for the product and does not endorse or recommend this or any other
+product.
+```
+
+---
+
 ## Quality gates
 
 Both live in `tools/MediTrail.GoldenRunner` and read the API project's user-secrets, so there is one
@@ -160,7 +236,7 @@ extraction-prompt issue.
 | **M1 — Foundation** | Done. Repo, both apps, schema, storage, upload persisting files and rows. Verified end to end against Supabase. |
 | **M2 — Extraction proven** | Done, with one open defect. The trap harness runs all 16 dataset images through the real extraction path on the demo model; the accuracy figure for the technical summary comes from the golden runner. Open: `patient_y_year1_1` gets an invented `documentDate` on a handwritten script (the harness's DATES check fails on it) — a prompt fix pending re-measurement per §18.4. |
 | **M3 — Intelligence complete** | Done for the medication path: merge, deterministic rule checks, LLM cross-check with component-wise grounding, openFDA verification (first `Confirmed` result: warfarin + aspirin), unresolved-medication flagging. All seven planted traps detected end to end (§18.2). Lab **trends** are built but undemonstrable on the judge dataset — it contains no longitudinal lab series (see traps.md). |
-| **M4 — Application complete** | Done. All dashboard views, evidence viewer with per-finding citation marking, processing screen, chat drawer. |
+| **M4 — Application complete** | Done. All dashboard views, evidence viewer with per-finding citation marking, processing screen, chat drawer. Round 2 nearby-clinic drawer is behind `Features:DoctorRecommendation` (see above). |
 | **M5 — Deployed** | Backend on Azure App Service, frontend served from the API's wwwroot; Supabase storage hardened and keepalive in place. Cold-path testing from an external network (§18.5) not yet performed. |
 | M6 — Submitted | Not started. |
 
