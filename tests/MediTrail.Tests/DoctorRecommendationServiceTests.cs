@@ -72,16 +72,68 @@ public class DoctorRecommendationServiceTests : IDisposable
         Assert.DoesNotContain("Unknown", response.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
-    private DoctorRecommendationService CreateService(IGeocoder geocoder) =>
+    [Fact]
+    public async Task Cache_Hit_From_Provider_Is_Labelled_And_Keeps_FetchedAt()
+    {
+        var fetched = new DateTimeOffset(2026, 8, 18, 15, 34, 2, TimeSpan.Zero);
+        var service = CreateService(
+            new StubGeocoder(new GeocodeResult
+            {
+                Status = GeocodeStatus.Ok,
+                ResolvedPlace = "Jaffna",
+                Latitude = 9.6615,
+                Longitude = 80.0255,
+                Geocoder = "static_city_table"
+            }),
+            new StubProvider(new ProviderResult
+            {
+                Status = ProviderStatus.Ok,
+                FetchedAt = fetched,
+                ServedFromCache = true,
+                Facilities =
+                [
+                    new NormalizedFacility
+                    {
+                        Source = "openstreetmap",
+                        SourceRef = "node/1",
+                        Category = "hospital",
+                        Latitude = 9.6615,
+                        Longitude = 80.0255,
+                        DistanceMeters = 0
+                    }
+                ]
+            }));
+
+        var response = await service.SearchAsync(_patientId, new DoctorSearchRequest
+        {
+            LocationText = "Jaffna"
+        });
+
+        Assert.True(response.ServedFromCache);
+        Assert.Equal(fetched, response.FetchedAtUtc);
+        Assert.Null(Assert.Single(response.Results).Name);
+        Assert.Equal(fetched, Assert.Single(_db.DoctorSearches).FetchedAt);
+        Assert.True(Assert.Single(_db.DoctorSearches).ServedFromCache);
+    }
+
+    private DoctorRecommendationService CreateService(IGeocoder geocoder, IDoctorSearchProvider? provider = null) =>
         new(
             _db,
             geocoder,
-            new NotConfiguredDoctorSearchProvider(),
+            provider ?? new NotConfiguredDoctorSearchProvider(),
             Options.Create(new DoctorRecommendationOptions()));
 
     private sealed class StubGeocoder(GeocodeResult result) : IGeocoder
     {
         public Task<GeocodeResult> GeocodeAsync(string locationText, CancellationToken ct = default) =>
+            Task.FromResult(result);
+    }
+
+    private sealed class StubProvider(ProviderResult result) : IDoctorSearchProvider
+    {
+        public string Source => "openstreetmap";
+
+        public Task<ProviderResult> SearchAsync(ProviderQuery query, CancellationToken ct = default) =>
             Task.FromResult(result);
     }
 }

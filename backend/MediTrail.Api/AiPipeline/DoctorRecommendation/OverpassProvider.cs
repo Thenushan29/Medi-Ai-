@@ -15,8 +15,10 @@ namespace MediTrail.Api.AiPipeline.DoctorRecommendation;
 public sealed class OverpassProvider(
     HttpClient http,
     IOptions<DoctorRecommendationOptions> options,
-    ILogger<OverpassProvider> logger) : IDoctorSearchProvider
+    ILogger<OverpassProvider> logger,
+    IProviderCache cache) : IDoctorSearchProvider
 {
+    public const string CacheKeyPrefix = "overpass";
     public const string HttpClientName = "Overpass";
     public const string Attribution = "© OpenStreetMap contributors (ODbL)";
 
@@ -30,6 +32,24 @@ public sealed class OverpassProvider(
     public string Source => "openstreetmap";
 
     public async Task<ProviderResult> SearchAsync(ProviderQuery query, CancellationToken ct = default)
+    {
+        var cached = await cache.TryGetAsync(CacheKeyPrefix, query, ct);
+        if (cached is not null)
+        {
+            logger.LogInformation("Overpass served from cache fetched at {FetchedAt:u}", cached.FetchedAt);
+            return cached;
+        }
+
+        var live = await FetchLiveAsync(query, ct);
+        if (live.Status is ProviderStatus.Ok or ProviderStatus.Empty)
+        {
+            await cache.SetAsync(CacheKeyPrefix, query, live, ct);
+        }
+
+        return live;
+    }
+
+    private async Task<ProviderResult> FetchLiveAsync(ProviderQuery query, CancellationToken ct)
     {
         var ql = BuildQuery(query.Latitude, query.Longitude, query.RadiusMeters, _options.OverpassTimeoutSeconds);
         Exception? lastError = null;
@@ -54,7 +74,8 @@ public sealed class OverpassProvider(
                         Status = ProviderStatus.Empty,
                         Facilities = [],
                         FetchedAt = fetchedAt,
-                        EndpointUsed = endpoint
+                        EndpointUsed = endpoint,
+                        ServedFromCache = false
                     };
                 }
 
@@ -64,7 +85,8 @@ public sealed class OverpassProvider(
                     Status = ProviderStatus.Ok,
                     Facilities = facilities,
                     FetchedAt = fetchedAt,
-                    EndpointUsed = endpoint
+                    EndpointUsed = endpoint,
+                    ServedFromCache = false
                 };
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -79,7 +101,7 @@ public sealed class OverpassProvider(
         }
 
         logger.LogWarning(lastError, "Every Overpass endpoint failed");
-        return new ProviderResult { Status = ProviderStatus.Failed, Facilities = [] };
+        return new ProviderResult { Status = ProviderStatus.Failed, Facilities = [], ServedFromCache = false };
     }
 
     public static string BuildQuery(double lat, double lng, int radiusMeters, int timeoutSeconds)

@@ -119,6 +119,7 @@ builder.Services.AddScoped<IAnalysisService, AnalysisService>();
 builder.Services.AddScoped<ITrendAnalyzer, TrendAnalyzer>();
 builder.Services.AddScoped<IGroundedChatService, GroundedChatService>();
 builder.Services.AddScoped<IGeocoder, Geocoder>();
+builder.Services.AddScoped<IProviderCache, ProviderCache>();
 builder.Services.AddScoped<NotConfiguredDoctorSearchProvider>();
 builder.Services.AddScoped<IDoctorRecommendationService, DoctorRecommendationService>();
 builder.Services.AddScoped<IDoctorSearchProvider>(provider =>

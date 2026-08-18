@@ -79,7 +79,8 @@ public sealed class DoctorRecommendationService(
 
         if (geo.Status == GeocodeStatus.LocationNotFound)
         {
-            var missing = await PersistAsync(patientId, request, specialty, geo, "location_not_found", 0, geo.FetchedAt, ct);
+            var missing = await PersistAsync(
+                patientId, request, specialty, geo, "location_not_found", 0, geo.FetchedAt, servedFromCache: false, ct);
             return Respond(
                 missing,
                 specialty,
@@ -92,7 +93,8 @@ public sealed class DoctorRecommendationService(
 
         if (geo.Status != GeocodeStatus.Ok || geo.Latitude is null || geo.Longitude is null)
         {
-            var failed = await PersistAsync(patientId, request, specialty, geo, "failed", 0, geo.FetchedAt, ct);
+            var failed = await PersistAsync(
+                patientId, request, specialty, geo, "failed", 0, geo.FetchedAt, servedFromCache: false, ct);
             return Respond(
                 failed,
                 specialty,
@@ -130,7 +132,15 @@ public sealed class DoctorRecommendationService(
 
         var fetchedAt = providerResult.FetchedAt ?? geo.FetchedAt;
         var persisted = await PersistAsync(
-            patientId, request, specialty, geo, status, providerResult.Facilities.Count, fetchedAt, ct);
+            patientId,
+            request,
+            specialty,
+            geo,
+            status,
+            providerResult.Facilities.Count,
+            fetchedAt,
+            providerResult.ServedFromCache,
+            ct);
 
         var message = providerResult.Status switch
         {
@@ -166,6 +176,7 @@ public sealed class DoctorRecommendationService(
         string providerStatus,
         int resultCount,
         DateTimeOffset? fetchedAt,
+        bool servedFromCache,
         CancellationToken ct)
     {
         var row = new DoctorSearch
@@ -182,7 +193,7 @@ public sealed class DoctorRecommendationService(
             Availability = string.IsNullOrWhiteSpace(request.Availability) ? "anytime" : request.Availability,
             Provider = searchProvider.Source,
             ProviderStatus = providerStatus,
-            ServedFromCache = geo.ServedFromCache,
+            ServedFromCache = servedFromCache,
             ResultCount = resultCount,
             FetchedAt = fetchedAt
         };

@@ -55,6 +55,7 @@ public sealed record ProviderResult
     public IReadOnlyList<NormalizedFacility> Facilities { get; init; } = [];
     public DateTimeOffset? FetchedAt { get; init; }
     public string? EndpointUsed { get; init; }
+    public bool ServedFromCache { get; init; }
 }
 
 public interface IDoctorSearchProvider

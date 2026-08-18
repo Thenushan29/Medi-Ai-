@@ -190,7 +190,7 @@ public class OverpassProviderTests
             OverpassEndpoints = Endpoints,
             OverpassTimeoutSeconds = 5
         });
-        return new OverpassProvider(http, options, NullLogger<OverpassProvider>.Instance);
+        return new OverpassProvider(http, options, NullLogger<OverpassProvider>.Instance, new NoCache());
     }
 
     private static HttpResponseMessage Json(HttpStatusCode status, string json) =>
@@ -223,4 +223,15 @@ public class OverpassProviderTests
     }
 
     private sealed record CapturedRequest(HttpMethod Method, Uri? RequestUri, string Body);
+
+    private sealed class NoCache : IProviderCache
+    {
+        public Task<ProviderResult?> TryGetAsync(
+            string keyPrefix, ProviderQuery query, CancellationToken ct = default) =>
+            Task.FromResult<ProviderResult?>(null);
+
+        public Task SetAsync(
+            string keyPrefix, ProviderQuery query, ProviderResult result, CancellationToken ct = default) =>
+            Task.CompletedTask;
+    }
 }
