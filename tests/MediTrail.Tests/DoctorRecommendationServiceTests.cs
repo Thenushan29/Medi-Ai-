@@ -116,6 +116,89 @@ public class DoctorRecommendationServiceTests : IDisposable
         Assert.True(Assert.Single(_db.DoctorSearches).ServedFromCache);
     }
 
+    [Fact]
+    public async Task Empty_At_5km_Retries_15km_In_One_Round_Trip()
+    {
+        var provider = new LadderProvider();
+        var service = CreateService(OkJaffna(), provider);
+
+        var response = await service.SearchAsync(_patientId, new DoctorSearchRequest
+        {
+            LocationText = "Jaffna"
+        });
+
+        Assert.Equal(new[] { 5000, 15000 }, provider.Radii);
+        Assert.Equal([5000, 15000], response.RadiusLadderUsed);
+        Assert.Equal(15000, response.RadiusMeters);
+        Assert.Equal("ok", response.Status);
+        Assert.Equal(40000, response.SuggestedNextRadiusMeters);
+        var facility = Assert.Single(response.Results);
+        Assert.Null(facility.Name);
+        Assert.Equal("node/1", facility.SourceRef);
+        Assert.Single(_db.DoctorSearchResults);
+        Assert.Null(Assert.Single(_db.DoctorSearchResults).Name);
+        Assert.Equal(15000, Assert.Single(_db.DoctorSearches).RadiusMeters);
+    }
+
+    [Fact]
+    public async Task Ok_At_5km_Does_Not_Widen()
+    {
+        var provider = new LadderProvider { FillAtMeters = 5000 };
+        var service = CreateService(OkJaffna(), provider);
+
+        var response = await service.SearchAsync(_patientId, new DoctorSearchRequest { LocationText = "Jaffna" });
+
+        Assert.Equal(new[] { 5000 }, provider.Radii);
+        Assert.Equal([5000], response.RadiusLadderUsed);
+        Assert.Equal("ok", response.Status);
+    }
+
+    [Fact]
+    public async Task Empty_Provider_Persists_Zero_Rows()
+    {
+        var service = CreateService(OkJaffna(), new StubProvider(new ProviderResult
+        {
+            Status = ProviderStatus.Empty,
+            Facilities = []
+        }));
+
+        var response = await service.SearchAsync(_patientId, new DoctorSearchRequest { LocationText = "Jaffna" });
+
+        Assert.Equal("empty", response.Status);
+        Assert.Empty(response.Results);
+        Assert.Equal(0, Assert.Single(_db.DoctorSearches).ResultCount);
+        Assert.Empty(_db.DoctorSearchResults);
+        Assert.Equal(40000, response.SuggestedNextRadiusMeters);
+    }
+
+    [Fact]
+    public async Task Failed_Provider_Persists_Zero_Rows()
+    {
+        var service = CreateService(OkJaffna(), new StubProvider(new ProviderResult
+        {
+            Status = ProviderStatus.Failed,
+            Facilities = []
+        }));
+
+        var response = await service.SearchAsync(_patientId, new DoctorSearchRequest { LocationText = "Jaffna" });
+
+        Assert.Equal("failed", response.Status);
+        Assert.Empty(response.Results);
+        Assert.Empty(_db.DoctorSearchResults);
+        Assert.Equal(0, Assert.Single(_db.DoctorSearches).ResultCount);
+    }
+
+    private static StubGeocoder OkJaffna() =>
+        new(new GeocodeResult
+        {
+            Status = GeocodeStatus.Ok,
+            ResolvedPlace = "Jaffna",
+            Latitude = 9.6615,
+            Longitude = 80.0255,
+            Geocoder = "static_city_table",
+            FetchedAt = DateTimeOffset.UtcNow
+        });
+
     private DoctorRecommendationService CreateService(IGeocoder geocoder, IDoctorSearchProvider? provider = null) =>
         new(
             _db,
@@ -149,5 +232,39 @@ public class DoctorRecommendationServiceTests : IDisposable
                 ResolvedBy = "fallback",
                 Reason = SpecialtyMaps.NoSignalReason
             });
+    }
+
+    private sealed class LadderProvider : IDoctorSearchProvider
+    {
+        public string Source => "openstreetmap";
+        public int FillAtMeters { get; init; } = 15000;
+        public List<int> Radii { get; } = [];
+
+        public Task<ProviderResult> SearchAsync(ProviderQuery query, CancellationToken ct = default)
+        {
+            Radii.Add(query.RadiusMeters);
+            if (query.RadiusMeters < FillAtMeters)
+            {
+                return Task.FromResult(new ProviderResult { Status = ProviderStatus.Empty, Facilities = [] });
+            }
+
+            return Task.FromResult(new ProviderResult
+            {
+                Status = ProviderStatus.Ok,
+                FetchedAt = DateTimeOffset.UtcNow,
+                Facilities =
+                [
+                    new NormalizedFacility
+                    {
+                        Source = "openstreetmap",
+                        SourceRef = "node/1",
+                        Category = "hospital",
+                        Latitude = query.Latitude,
+                        Longitude = query.Longitude,
+                        DistanceMeters = 0
+                    }
+                ]
+            });
+        }
     }
 }

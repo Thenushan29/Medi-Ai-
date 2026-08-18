@@ -122,6 +122,7 @@ builder.Services.AddScoped<IGeocoder, Geocoder>();
 builder.Services.AddScoped<IProviderCache, ProviderCache>();
 builder.Services.AddScoped<ISpecialtyResolver, SpecialtyResolver>();
 builder.Services.AddSingleton<DoctorRankingService>();
+builder.Services.AddScoped<IProviderHealth, ProviderHealth>();
 builder.Services.AddScoped<NotConfiguredDoctorSearchProvider>();
 builder.Services.AddScoped<IDoctorRecommendationService, DoctorRecommendationService>();
 builder.Services.AddScoped<IDoctorSearchProvider>(provider =>
@@ -152,6 +153,13 @@ builder.Services.AddHttpClient<IRxClassClient, RxClassClient>((provider, client)
     var opt = provider.GetRequiredService<IOptions<DoctorRecommendationOptions>>().Value;
     client.BaseAddress = new Uri(opt.RxClassBaseUrl.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(opt.RxClassTimeoutSeconds);
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", opt.NominatimUserAgent);
+});
+
+builder.Services.AddHttpClient(ProviderHealth.HttpClientName, (provider, client) =>
+{
+    var opt = provider.GetRequiredService<IOptions<DoctorRecommendationOptions>>().Value;
+    client.Timeout = TimeSpan.FromSeconds(8);
     client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", opt.NominatimUserAgent);
 });
 

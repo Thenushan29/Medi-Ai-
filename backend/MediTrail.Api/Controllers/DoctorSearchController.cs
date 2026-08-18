@@ -14,6 +14,7 @@ namespace MediTrail.Api.Controllers;
 public sealed class DoctorSearchController(
     IPatientService patients,
     IDoctorRecommendationService doctors,
+    IProviderHealth health,
     IOptions<FeatureOptions> features) : ControllerBase
 {
     private readonly bool _enabled = features.Value.DoctorRecommendation;
@@ -71,6 +72,12 @@ public sealed class DoctorSearchController(
 
         return Ok(result);
     }
+
+    /// <summary>Venue ping — Overpass, Nominatim, RxNav. Available even when the feature flag is off.</summary>
+    [HttpGet("health/providers")]
+    [ProducesResponseType<IReadOnlyList<ProviderHealthDto>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ProviderHealthDto>>> Providers(CancellationToken ct) =>
+        Ok(await health.PingAsync(ct));
 
     private ApiError Disabled() => new()
     {

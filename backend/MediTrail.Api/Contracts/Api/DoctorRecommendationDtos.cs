@@ -95,3 +95,12 @@ public sealed record CreateDoctorSearchRequest
     public string Availability { get; init; } = "anytime";
     public int? RadiusMeters { get; init; }
 }
+
+public sealed record ProviderHealthDto
+{
+    public required string Name { get; init; }
+    public required string Status { get; init; }
+    public int? LatencyMs { get; init; }
+    public string? Endpoint { get; init; }
+    public string? Detail { get; init; }
+}

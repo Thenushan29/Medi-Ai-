@@ -70,7 +70,8 @@ public sealed class DoctorRecommendationService(
         if (geo.Status == GeocodeStatus.LocationNotFound)
         {
             var missing = await PersistAsync(
-                patientId, request, specialty, geo, "location_not_found", 0, geo.FetchedAt, servedFromCache: false, ct);
+                patientId, request, specialty, geo, "location_not_found",
+                request.RadiusMeters ?? _options.DefaultRadiusMeters, [], geo.FetchedAt, servedFromCache: false, ct);
             return Respond(
                 missing,
                 specialty,
@@ -84,7 +85,8 @@ public sealed class DoctorRecommendationService(
         if (geo.Status != GeocodeStatus.Ok || geo.Latitude is null || geo.Longitude is null)
         {
             var failed = await PersistAsync(
-                patientId, request, specialty, geo, "failed", 0, geo.FetchedAt, servedFromCache: false, ct);
+                patientId, request, specialty, geo, "failed",
+                request.RadiusMeters ?? _options.DefaultRadiusMeters, [], geo.FetchedAt, servedFromCache: false, ct);
             return Respond(
                 failed,
                 specialty,
@@ -103,15 +105,31 @@ public sealed class DoctorRecommendationService(
             Geocoder = geo.Geocoder ?? "unknown"
         };
 
-        var radius = request.RadiusMeters ?? _options.DefaultRadiusMeters;
+        var firstRadius = request.RadiusMeters ?? _options.DefaultRadiusMeters;
+        var fallbackRadius = _options.FallbackRadiusMeters;
+        var ladder = new List<int> { firstRadius };
+
         var providerResult = await searchProvider.SearchAsync(new ProviderQuery
         {
             Latitude = origin.Latitude,
             Longitude = origin.Longitude,
-            RadiusMeters = radius,
+            RadiusMeters = firstRadius,
             SpecialtyCode = specialty.Code
         }, ct);
 
+        if (providerResult.Status == ProviderStatus.Empty && firstRadius < fallbackRadius)
+        {
+            ladder.Add(fallbackRadius);
+            providerResult = await searchProvider.SearchAsync(new ProviderQuery
+            {
+                Latitude = origin.Latitude,
+                Longitude = origin.Longitude,
+                RadiusMeters = fallbackRadius,
+                SpecialtyCode = specialty.Code
+            }, ct);
+        }
+
+        var usedRadius = ladder[^1];
         var status = providerResult.Status switch
         {
             ProviderStatus.Ok => "ok",
@@ -120,6 +138,11 @@ public sealed class DoctorRecommendationService(
             _ => "failed"
         };
 
+        var ranked = ranking.Rank(
+            providerResult.Status == ProviderStatus.Ok ? providerResult.Facilities : [],
+            specialty.Code,
+            request.Availability);
+
         var fetchedAt = providerResult.FetchedAt ?? geo.FetchedAt;
         var persisted = await PersistAsync(
             patientId,
@@ -127,7 +150,8 @@ public sealed class DoctorRecommendationService(
             specialty,
             geo,
             status,
-            providerResult.Facilities.Count,
+            usedRadius,
+            ranked,
             fetchedAt,
             providerResult.ServedFromCache,
             ct);
@@ -137,7 +161,7 @@ public sealed class DoctorRecommendationService(
             ProviderStatus.NotConfigured =>
                 "Facility search is not configured on this server yet. Location resolved; no clinics are shown.",
             ProviderStatus.Empty =>
-                $"No clinics or hospitals found within {radius / 1000.0:0} km of {origin.ResolvedPlace} for {specialty.Label}.",
+                $"No clinics or hospitals found within {usedRadius / 1000.0:0} km of {origin.ResolvedPlace} for {specialty.Label}.",
             ProviderStatus.Failed =>
                 "We couldn't reach the map data service just now. Nothing is shown rather than showing you something unverified.",
             _ => null
@@ -147,6 +171,10 @@ public sealed class DoctorRecommendationService(
             ? OverpassProvider.Attribution
             : null;
 
+        int? suggestedNext = usedRadius < _options.SuggestedNextRadiusMeters
+            ? _options.SuggestedNextRadiusMeters
+            : null;
+
         return Respond(
             persisted,
             specialty,
@@ -154,11 +182,10 @@ public sealed class DoctorRecommendationService(
             status,
             status,
             message,
-            ranking.Rank(
-                providerResult.Status == ProviderStatus.Ok ? providerResult.Facilities : [],
-                specialty.Code,
-                request.Availability),
-            attribution);
+            ranked,
+            attribution,
+            ladder,
+            suggestedNext);
     }
 
     private async Task<DoctorSearch> PersistAsync(
@@ -167,7 +194,8 @@ public sealed class DoctorRecommendationService(
         SpecialtyResolutionDto specialty,
         GeocodeResult geo,
         string providerStatus,
-        int resultCount,
+        int radiusMeters,
+        IReadOnlyList<FacilityResultDto> results,
         DateTimeOffset? fetchedAt,
         bool servedFromCache,
         CancellationToken ct)
@@ -182,12 +210,12 @@ public sealed class DoctorRecommendationService(
             ResolvedPlace = geo.ResolvedPlace,
             Latitude = geo.Latitude,
             Longitude = geo.Longitude,
-            RadiusMeters = request.RadiusMeters ?? _options.DefaultRadiusMeters,
+            RadiusMeters = radiusMeters,
             Availability = string.IsNullOrWhiteSpace(request.Availability) ? "anytime" : request.Availability,
             Provider = searchProvider.Source,
             ProviderStatus = providerStatus,
             ServedFromCache = servedFromCache,
-            ResultCount = resultCount,
+            ResultCount = results.Count,
             FetchedAt = fetchedAt
         };
 
@@ -212,6 +240,30 @@ public sealed class DoctorRecommendationService(
             });
         }
 
+        foreach (var facility in results)
+        {
+            db.DoctorSearchResults.Add(new DoctorSearchResult
+            {
+                SearchId = row.Id,
+                Source = searchProvider.Source,
+                SourceRef = facility.SourceRef,
+                Name = facility.Name,
+                Category = facility.Category,
+                SpecialtyTag = facility.SpecialtyTag,
+                Address = facility.Address,
+                Latitude = facility.Latitude,
+                Longitude = facility.Longitude,
+                DistanceMeters = facility.DistanceMeters,
+                Phone = facility.Phone,
+                Website = facility.Website,
+                OpeningHours = facility.OpeningHours,
+                AvailabilityMatch = facility.AvailabilityMatch,
+                RankScore = facility.RankScore,
+                RankReasons = facility.RankReasons.ToList(),
+                FetchedAt = fetchedAt ?? DateTimeOffset.UtcNow
+            });
+        }
+
         await db.SaveChangesAsync(ct);
         return row;
     }
@@ -224,7 +276,9 @@ public sealed class DoctorRecommendationService(
         string providerStatus,
         string? message,
         IReadOnlyList<FacilityResultDto> results,
-        string? attribution = null) =>
+        string? attribution = null,
+        IReadOnlyList<int>? radiusLadderUsed = null,
+        int? suggestedNextRadiusMeters = null) =>
         new()
         {
             SearchId = row.Id,
@@ -232,13 +286,15 @@ public sealed class DoctorRecommendationService(
             Specialty = specialty,
             Origin = origin,
             RadiusMeters = row.RadiusMeters,
+            RadiusLadderUsed = radiusLadderUsed,
             Provider = row.Provider,
             ProviderStatus = providerStatus,
             ServedFromCache = row.ServedFromCache,
             FetchedAtUtc = row.FetchedAt,
             Attribution = attribution,
             Results = results,
-            Message = message
+            Message = message,
+            SuggestedNextRadiusMeters = suggestedNextRadiusMeters
         };
 
     private async Task<SpecialtyResolution> ResolveSpecialtyAsync(

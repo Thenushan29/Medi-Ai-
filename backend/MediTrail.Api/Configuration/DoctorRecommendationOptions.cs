@@ -41,4 +41,6 @@ public sealed class DoctorRecommendationOptions
     public int DefaultRadiusMeters { get; set; } = 5000;
 
     public int FallbackRadiusMeters { get; set; } = 15000;
+
+    public int SuggestedNextRadiusMeters { get; set; } = 40000;
 }
