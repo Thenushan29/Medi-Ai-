@@ -8,7 +8,9 @@ import type {
   ChatAnswer,
   ChatMessage,
   ChatTurn,
+  CreateDoctorSearchRequest,
   CreatePatientRequest,
+  DoctorSearchResponse,
   DocumentDetail,
   LabTrend,
   MedicationGroup,
@@ -153,6 +155,12 @@ export class ApiService {
 
     return this.http
       .get<SpecialtyResolution>(`${this.base}/patients/${patientId}/specialty-suggestion`, { params })
+      .pipe(catchError(toReadableError));
+  }
+
+  searchDoctors(patientId: string, request: CreateDoctorSearchRequest): Observable<DoctorSearchResponse> {
+    return this.http
+      .post<DoctorSearchResponse>(`${this.base}/patients/${patientId}/doctor-search`, request)
       .pipe(catchError(toReadableError));
   }
 }

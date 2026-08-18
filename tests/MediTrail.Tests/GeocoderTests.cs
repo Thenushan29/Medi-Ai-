@@ -84,6 +84,20 @@ public class GeocoderTests : IDisposable
         Assert.Equal("Jaffna, Northern Province, Sri Lanka", result.ResolvedPlace);
     }
 
+    [Fact]
+    public async Task Tamil_And_Sinhala_Place_Names_Do_Not_Throw()
+    {
+        var geocoder = new Geocoder(_db, new StubNominatim(GeocodeStatus.LocationNotFound), NullLogger<Geocoder>.Instance);
+
+        var tamil = await geocoder.GeocodeAsync("யாழ்ப்பாணம்");
+        var sinhala = await geocoder.GeocodeAsync("යාපනය");
+
+        Assert.Equal(GeocodeStatus.LocationNotFound, tamil.Status);
+        Assert.Equal(GeocodeStatus.LocationNotFound, sinhala.Status);
+        Assert.Null(tamil.Latitude);
+        Assert.Null(sinhala.Latitude);
+    }
+
     private sealed class StubNominatim(GeocodeStatus status, string? place = null, double? lat = null, double? lng = null)
         : INominatimClient
     {

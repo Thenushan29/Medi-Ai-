@@ -351,3 +351,57 @@ export interface SpecialtyResolution {
   reason: string;
   evidence: SpecialtyEvidence[];
 }
+
+export type AvailabilityWindow = 'this_week' | 'evenings' | 'weekend' | 'anytime';
+
+export interface CreateDoctorSearchRequest {
+  alertId?: string;
+  specialtyOverride?: string;
+  locationText?: string;
+  latitude?: number;
+  longitude?: number;
+  availability: AvailabilityWindow;
+  radiusMeters?: number;
+}
+
+export interface SearchOrigin {
+  resolvedPlace?: string;
+  latitude: number;
+  longitude: number;
+  geocoder: string;
+}
+
+export interface FacilityResult {
+  sourceRef: string;
+  name?: string | null;
+  category?: string | null;
+  specialtyTag?: string | null;
+  address?: string | null;
+  distanceMeters: number;
+  phone?: string | null;
+  website?: string | null;
+  openingHours?: string | null;
+  availabilityMatch: string;
+  rankScore: number;
+  rankReasons: string[];
+  mapUrl?: string | null;
+  latitude: number;
+  longitude: number;
+}
+
+export interface DoctorSearchResponse {
+  searchId: string;
+  status: string;
+  specialty?: SpecialtyResolution;
+  origin?: SearchOrigin;
+  radiusMeters?: number;
+  radiusLadderUsed?: number[];
+  provider: string;
+  providerStatus: string;
+  servedFromCache: boolean;
+  fetchedAtUtc?: string;
+  attribution?: string;
+  results: FacilityResult[];
+  message?: string;
+  suggestedNextRadiusMeters?: number;
+}
