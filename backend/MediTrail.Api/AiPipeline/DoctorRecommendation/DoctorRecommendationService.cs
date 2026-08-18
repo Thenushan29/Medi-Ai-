@@ -13,6 +13,7 @@ public sealed class DoctorRecommendationService(
     IGeocoder geocoder,
     IDoctorSearchProvider searchProvider,
     ISpecialtyResolver specialtyResolver,
+    DoctorRankingService ranking,
     IOptions<DoctorRecommendationOptions> options) : IDoctorRecommendationService
 {
     private readonly DoctorRecommendationOptions _options = options.Value;
@@ -153,7 +154,10 @@ public sealed class DoctorRecommendationService(
             status,
             status,
             message,
-            MapFacilities(providerResult),
+            ranking.Rank(
+                providerResult.Status == ProviderStatus.Ok ? providerResult.Facilities : [],
+                specialty.Code,
+                request.Availability),
             attribution);
     }
 
@@ -236,32 +240,6 @@ public sealed class DoctorRecommendationService(
             Results = results,
             Message = message
         };
-
-    private static IReadOnlyList<FacilityResultDto> MapFacilities(ProviderResult providerResult)
-    {
-        if (providerResult.Status != ProviderStatus.Ok) return [];
-
-        return providerResult.Facilities.Select(f => new FacilityResultDto
-        {
-            SourceRef = f.SourceRef,
-            Name = f.Name,
-            Category = f.Category,
-            SpecialtyTag = f.SpecialtyTag,
-            Address = f.Address,
-            DistanceMeters = f.DistanceMeters,
-            Phone = f.Phone,
-            Website = f.Website,
-            OpeningHours = f.OpeningHours,
-            AvailabilityMatch = "unknown",
-            RankScore = 0,
-            RankReasons = [],
-            MapUrl = f.Source == "openstreetmap"
-                ? $"https://www.openstreetmap.org/{f.SourceRef}"
-                : null,
-            Latitude = f.Latitude,
-            Longitude = f.Longitude
-        }).ToList();
-    }
 
     private async Task<SpecialtyResolution> ResolveSpecialtyAsync(
         Guid patientId, DoctorSearchRequest request, CancellationToken ct)

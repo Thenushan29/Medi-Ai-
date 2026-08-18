@@ -122,6 +122,7 @@ public class DoctorRecommendationServiceTests : IDisposable
             geocoder,
             provider ?? new NotConfiguredDoctorSearchProvider(),
             new StubResolver(),
+            new DoctorRankingService(),
             Options.Create(new DoctorRecommendationOptions()));
 
     private sealed class StubGeocoder(GeocodeResult result) : IGeocoder
