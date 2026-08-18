@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using MediTrail.Api.AiPipeline;
 using MediTrail.Api.AiPipeline.Chat;
 using MediTrail.Api.AiPipeline.CrossCheck;
+using MediTrail.Api.AiPipeline.DoctorRecommendation;
 using MediTrail.Api.AiPipeline.Trends;
 using MediTrail.Api.AiPipeline.Extraction;
 using MediTrail.Api.AiPipeline.Normalization;
@@ -35,6 +36,10 @@ builder.Services.Configure<PipelineOptions>(
     builder.Configuration.GetSection(PipelineOptions.SectionName));
 builder.Services.Configure<OpenFdaOptions>(
     builder.Configuration.GetSection(OpenFdaOptions.SectionName));
+builder.Services.Configure<FeatureOptions>(
+    builder.Configuration.GetSection(FeatureOptions.SectionName));
+builder.Services.Configure<DoctorRecommendationOptions>(
+    builder.Configuration.GetSection(DoctorRecommendationOptions.SectionName));
 
 // ---------------------------------------------------------------------------
 // Data
@@ -113,6 +118,17 @@ builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<IAnalysisService, AnalysisService>();
 builder.Services.AddScoped<ITrendAnalyzer, TrendAnalyzer>();
 builder.Services.AddScoped<IGroundedChatService, GroundedChatService>();
+builder.Services.AddScoped<IGeocoder, Geocoder>();
+builder.Services.AddScoped<IDoctorSearchProvider, NotConfiguredDoctorSearchProvider>();
+builder.Services.AddScoped<IDoctorRecommendationService, DoctorRecommendationService>();
+
+builder.Services.AddHttpClient<INominatimClient, NominatimClient>((provider, client) =>
+{
+    var opt = provider.GetRequiredService<IOptions<DoctorRecommendationOptions>>().Value;
+    client.BaseAddress = new Uri(opt.NominatimBaseUrl.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(opt.NominatimTimeoutSeconds);
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", opt.NominatimUserAgent);
+});
 
 // ---------------------------------------------------------------------------
 // Web
