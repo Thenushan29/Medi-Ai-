@@ -5,6 +5,7 @@ using System.Text.Json;
 using MediTrail.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MediTrail.Api.Data.Migrations
 {
     [DbContext(typeof(MediTrailDbContext))]
-    partial class MediTrailDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260818172950_AddDoctorRecommendation")]
+    partial class AddDoctorRecommendation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

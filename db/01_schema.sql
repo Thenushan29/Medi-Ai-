@@ -329,3 +329,129 @@ BEGIN
 END $EF$;
 COMMIT;
 
+START TRANSACTION;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260818172950_AddDoctorRecommendation') THEN
+    CREATE TABLE provider_cache (
+        cache_key text NOT NULL,
+        provider text NOT NULL,
+        payload jsonb NOT NULL,
+        fetched_at timestamp with time zone NOT NULL DEFAULT now(),
+        expires_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_provider_cache PRIMARY KEY (cache_key)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260818172950_AddDoctorRecommendation') THEN
+    CREATE INDEX ix_provider_cache_expires_at ON provider_cache (expires_at);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260818172950_AddDoctorRecommendation') THEN
+    CREATE TABLE doctor_searches (
+        id uuid NOT NULL,
+        patient_id uuid NOT NULL,
+        alert_id uuid,
+        specialty_code character varying(64) NOT NULL,
+        specialty_source character varying(64) NOT NULL,
+        location_text character varying(200) NOT NULL,
+        resolved_place character varying(400),
+        latitude double precision,
+        longitude double precision,
+        radius_meters integer NOT NULL,
+        availability character varying(32) NOT NULL,
+        provider character varying(64) NOT NULL,
+        provider_status character varying(32) NOT NULL,
+        served_from_cache boolean NOT NULL DEFAULT FALSE,
+        result_count integer NOT NULL DEFAULT 0,
+        fetched_at timestamp with time zone,
+        created_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_doctor_searches PRIMARY KEY (id),
+        CONSTRAINT fk_doctor_searches_patients_patient_id FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260818172950_AddDoctorRecommendation') THEN
+    CREATE INDEX ix_doctor_searches_patient_id_created_at ON doctor_searches (patient_id, created_at);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260818172950_AddDoctorRecommendation') THEN
+    CREATE TABLE doctor_search_results (
+        id uuid NOT NULL,
+        search_id uuid NOT NULL,
+        source character varying(64) NOT NULL,
+        source_ref character varying(200) NOT NULL,
+        name character varying(300),
+        category character varying(64),
+        specialty_tag character varying(64),
+        address text,
+        latitude double precision NOT NULL,
+        longitude double precision NOT NULL,
+        distance_meters integer NOT NULL,
+        phone text,
+        website text,
+        opening_hours text,
+        availability_match character varying(32) NOT NULL,
+        rank_score integer NOT NULL,
+        rank_reasons jsonb NOT NULL DEFAULT '[]'::jsonb,
+        fetched_at timestamp with time zone NOT NULL,
+        CONSTRAINT pk_doctor_search_results PRIMARY KEY (id),
+        CONSTRAINT fk_doctor_search_results_doctor_searches_search_id FOREIGN KEY (search_id) REFERENCES doctor_searches (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260818172950_AddDoctorRecommendation') THEN
+    CREATE INDEX ix_doctor_search_results_search_id_rank_score ON doctor_search_results (search_id, rank_score);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260818172950_AddDoctorRecommendation') THEN
+    CREATE TABLE specialty_evidence (
+        id uuid NOT NULL,
+        search_id uuid NOT NULL,
+        evidence_type character varying(64) NOT NULL,
+        label character varying(300) NOT NULL,
+        source character varying(64),
+        source_id character varying(64),
+        source_url text,
+        CONSTRAINT pk_specialty_evidence PRIMARY KEY (id),
+        CONSTRAINT fk_specialty_evidence_doctor_searches_search_id FOREIGN KEY (search_id) REFERENCES doctor_searches (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260818172950_AddDoctorRecommendation') THEN
+    CREATE INDEX ix_specialty_evidence_search_id ON specialty_evidence (search_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM "__EFMigrationsHistory" WHERE "migration_id" = '20260818172950_AddDoctorRecommendation') THEN
+    INSERT INTO "__EFMigrationsHistory" (migration_id, product_version)
+    VALUES ('20260818172950_AddDoctorRecommendation', '10.0.10');
+    END IF;
+END $EF$;
+COMMIT;
+
+

@@ -18,6 +18,10 @@ public class MediTrailDbContext(DbContextOptions<MediTrailDbContext> options) : 
     public DbSet<Allergy> Allergies => Set<Allergy>();
     public DbSet<Alert> Alerts => Set<Alert>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<ProviderCacheEntry> ProviderCache => Set<ProviderCacheEntry>();
+    public DbSet<DoctorSearch> DoctorSearches => Set<DoctorSearch>();
+    public DbSet<DoctorSearchResult> DoctorSearchResults => Set<DoctorSearchResult>();
+    public DbSet<SpecialtyEvidence> SpecialtyEvidence => Set<SpecialtyEvidence>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -167,6 +171,89 @@ public class MediTrailDbContext(DbContextOptions<MediTrailDbContext> options) : 
                 .OnDelete(DeleteBehavior.Cascade);
 
             e.HasIndex(x => new { x.PatientId, x.Severity });
+        });
+
+        b.Entity<ProviderCacheEntry>(e =>
+        {
+            e.ToTable("provider_cache");
+            e.HasKey(x => x.CacheKey);
+            e.Property(x => x.CacheKey).HasMaxLength(400);
+            e.Property(x => x.Provider).HasMaxLength(64);
+
+            if (isPostgres)
+            {
+                e.Property(x => x.Payload).HasColumnType("jsonb");
+            }
+            else
+            {
+                e.Property(x => x.Payload).HasConversion(
+                    document => document.RootElement.GetRawText(),
+                    text => JsonDocument.Parse(text, default));
+            }
+
+            e.HasIndex(x => x.ExpiresAt);
+        });
+
+        b.Entity<DoctorSearch>(e =>
+        {
+            e.ToTable("doctor_searches");
+            e.Property(x => x.SpecialtyCode).HasMaxLength(64);
+            e.Property(x => x.SpecialtySource).HasMaxLength(64);
+            e.Property(x => x.LocationText).HasMaxLength(200);
+            e.Property(x => x.ResolvedPlace).HasMaxLength(400);
+            e.Property(x => x.Availability).HasMaxLength(32);
+            e.Property(x => x.Provider).HasMaxLength(64);
+            e.Property(x => x.ProviderStatus).HasMaxLength(32);
+
+            e.HasOne(x => x.Patient)
+                .WithMany(p => p.DoctorSearches)
+                .HasForeignKey(x => x.PatientId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => new { x.PatientId, x.CreatedAt });
+        });
+
+        b.Entity<DoctorSearchResult>(e =>
+        {
+            e.ToTable("doctor_search_results");
+            e.Property(x => x.Source).HasMaxLength(64);
+            e.Property(x => x.SourceRef).HasMaxLength(200);
+            e.Property(x => x.Name).HasMaxLength(300);
+            e.Property(x => x.Category).HasMaxLength(64);
+            e.Property(x => x.SpecialtyTag).HasMaxLength(64);
+            e.Property(x => x.AvailabilityMatch).HasMaxLength(32);
+
+            if (isPostgres)
+            {
+                e.Property(x => x.RankReasons).HasColumnType("jsonb");
+            }
+            else
+            {
+                e.Property(x => x.RankReasons).HasConversion(
+                    reasons => JsonSerializer.Serialize(reasons, (JsonSerializerOptions?)null),
+                    json => JsonSerializer.Deserialize<List<string>>(json, (JsonSerializerOptions?)null) ?? new List<string>());
+            }
+
+            e.HasOne(x => x.Search)
+                .WithMany(s => s.Results)
+                .HasForeignKey(x => x.SearchId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasIndex(x => new { x.SearchId, x.RankScore });
+        });
+
+        b.Entity<SpecialtyEvidence>(e =>
+        {
+            e.ToTable("specialty_evidence");
+            e.Property(x => x.EvidenceType).HasMaxLength(64);
+            e.Property(x => x.Label).HasMaxLength(300);
+            e.Property(x => x.Source).HasMaxLength(64);
+            e.Property(x => x.SourceId).HasMaxLength(64);
+
+            e.HasOne(x => x.Search)
+                .WithMany(s => s.Evidence)
+                .HasForeignKey(x => x.SearchId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
