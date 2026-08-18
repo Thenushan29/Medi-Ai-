@@ -163,6 +163,10 @@ export class ApiService {
       .post<DoctorSearchResponse>(`${this.base}/patients/${patientId}/doctor-search`, request)
       .pipe(catchError(toReadableError));
   }
+
+  getPlaces(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.base}/places`).pipe(catchError(toReadableError));
+  }
 }
 
 /**

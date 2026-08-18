@@ -59,6 +59,8 @@ public class DoctorRecommendationServiceTests : IDisposable
         Assert.Equal("location_not_found", stored.ProviderStatus);
         Assert.Equal(0, stored.ResultCount);
         Assert.Empty(_db.DoctorSearchResults);
+        Assert.Contains("Jaffna", response.SuggestedPlaces ?? []);
+        Assert.DoesNotContain("failed", response.Status);
     }
 
     [Fact]
@@ -182,6 +184,8 @@ public class DoctorRecommendationServiceTests : IDisposable
         Assert.Equal(0, Assert.Single(_db.DoctorSearches).ResultCount);
         Assert.Empty(_db.DoctorSearchResults);
         Assert.Equal(40000, response.SuggestedNextRadiusMeters);
+        Assert.False(string.IsNullOrWhiteSpace(response.NearestLargerCity));
+        Assert.NotEqual("Jaffna", response.NearestLargerCity);
     }
 
     [Fact]
@@ -197,6 +201,42 @@ public class DoctorRecommendationServiceTests : IDisposable
 
         Assert.Equal("failed", response.Status);
         Assert.Empty(response.Results);
+        Assert.Empty(_db.DoctorSearchResults);
+        Assert.Equal(0, Assert.Single(_db.DoctorSearches).ResultCount);
+    }
+
+    [Fact]
+    public async Task Failed_With_Stale_Cache_Returns_Labelled_Rows_And_Persists_Zero()
+    {
+        var fetched = new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero);
+        var service = CreateService(OkJaffna(), new StubProvider(new ProviderResult
+        {
+            Status = ProviderStatus.Failed,
+            StaleCache = true,
+            ServedFromCache = true,
+            FetchedAt = fetched,
+            Facilities =
+            [
+                new NormalizedFacility
+                {
+                    Source = "openstreetmap",
+                    SourceRef = "node/1",
+                    Category = "hospital",
+                    Latitude = 9.6615,
+                    Longitude = 80.0255,
+                    DistanceMeters = 400
+                }
+            ]
+        }));
+
+        var response = await service.SearchAsync(_patientId, new DoctorSearchRequest { LocationText = "Jaffna" });
+
+        Assert.Equal("failed", response.Status);
+        Assert.True(response.StaleCache);
+        Assert.Contains("cached", response.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(fetched, response.FetchedAtUtc);
+        var facility = Assert.Single(response.Results);
+        Assert.Null(facility.Name);
         Assert.Empty(_db.DoctorSearchResults);
         Assert.Equal(0, Assert.Single(_db.DoctorSearches).ResultCount);
     }

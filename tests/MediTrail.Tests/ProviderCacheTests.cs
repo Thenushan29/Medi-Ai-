@@ -128,6 +128,35 @@ public class ProviderCacheTests : IDisposable
         Assert.Single(handler.Requests);
     }
 
+    [Fact]
+    public async Task Expired_Ok_Row_Is_Served_As_Stale_When_Live_Fails()
+    {
+        var fetched = new DateTimeOffset(2026, 8, 16, 9, 0, 0, TimeSpan.Zero);
+        _db.ProviderCache.Add(new ProviderCacheEntry
+        {
+            CacheKey = ProviderCache.BuildKey("overpass", Jaffna),
+            Provider = "overpass",
+            Payload = System.Text.Json.JsonDocument.Parse(
+                """{"status":"Ok","facilities":[{"source":"openstreetmap","sourceRef":"node/1","category":"hospital","latitude":9.6615,"longitude":80.0255,"distanceMeters":0}]}"""),
+            FetchedAt = fetched,
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(-1)
+        });
+        await _db.SaveChangesAsync();
+
+        var handler = new ScriptedHandler(_ => throw new HttpRequestException("down"));
+        var provider = CreateProvider(handler);
+
+        var result = await provider.SearchAsync(Jaffna);
+
+        Assert.Equal(ProviderStatus.Failed, result.Status);
+        Assert.True(result.StaleCache);
+        Assert.True(result.ServedFromCache);
+        Assert.Equal(fetched, result.FetchedAt);
+        var facility = Assert.Single(result.Facilities);
+        Assert.Null(facility.Name);
+        Assert.Null(facility.Rating);
+    }
+
     private OverpassProvider CreateProvider(ScriptedHandler handler)
     {
         var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };

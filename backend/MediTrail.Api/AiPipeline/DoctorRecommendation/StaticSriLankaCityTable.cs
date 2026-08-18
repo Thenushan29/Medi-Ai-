@@ -71,4 +71,27 @@ public static class StaticSriLankaCityTable
     }
 
     public static IReadOnlyList<string> SuggestionNames() => Cities.Select(c => c.Name).Take(8).ToList();
+
+    /// <summary>Nearest mapped town that is not the current place. City names only — not clinics.</summary>
+    public static string? NearestOther(double lat, double lng, string? currentName)
+    {
+        string? best = null;
+        var bestMeters = int.MaxValue;
+
+        foreach (var city in Cities)
+        {
+            if (currentName is not null
+                && string.Equals(city.Name, currentName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var meters = GeoMath.HaversineMeters(lat, lng, city.Lat, city.Lng);
+            if (meters >= bestMeters) continue;
+            bestMeters = meters;
+            best = city.Name;
+        }
+
+        return best;
+    }
 }

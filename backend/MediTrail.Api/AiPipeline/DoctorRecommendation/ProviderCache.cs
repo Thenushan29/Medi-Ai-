@@ -14,6 +14,10 @@ public interface IProviderCache
     Task<ProviderResult?> TryGetAsync(string keyPrefix, ProviderQuery query, CancellationToken ct = default);
 
     Task SetAsync(string keyPrefix, ProviderQuery query, ProviderResult result, CancellationToken ct = default);
+
+    Task<ProviderResult?> TryGetExpiredAsync(
+        string keyPrefix, ProviderQuery query, CancellationToken ct = default) =>
+        Task.FromResult<ProviderResult?>(null);
 }
 
 /// <summary>
@@ -46,9 +50,22 @@ public sealed class ProviderCache(
     public async Task<ProviderResult?> TryGetAsync(
         string keyPrefix, ProviderQuery query, CancellationToken ct = default)
     {
+        return await ReadAsync(keyPrefix, query, expiredOnly: false, ct);
+    }
+
+    public async Task<ProviderResult?> TryGetExpiredAsync(
+        string keyPrefix, ProviderQuery query, CancellationToken ct = default) =>
+        await ReadAsync(keyPrefix, query, expiredOnly: true, ct);
+
+    private async Task<ProviderResult?> ReadAsync(
+        string keyPrefix, ProviderQuery query, bool expiredOnly, CancellationToken ct)
+    {
         var key = BuildKey(keyPrefix, query);
+        var now = DateTimeOffset.UtcNow;
         var row = await db.ProviderCache.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.CacheKey == key && c.ExpiresAt > DateTimeOffset.UtcNow, ct);
+            .FirstOrDefaultAsync(
+                c => c.CacheKey == key && (expiredOnly ? c.ExpiresAt <= now : c.ExpiresAt > now),
+                ct);
 
         if (row is null) return null;
 

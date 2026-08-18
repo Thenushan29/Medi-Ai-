@@ -1,3 +1,4 @@
+using System.Globalization;
 using MediTrail.Api.AiPipeline.Normalization;
 using MediTrail.Api.Configuration;
 using MediTrail.Api.Contracts.Api;
@@ -19,6 +20,8 @@ public sealed class DoctorRecommendationService(
     private readonly DoctorRecommendationOptions _options = options.Value;
 
     public IReadOnlyList<SpecialtyOptionDto> Specialties() => SpecialtyCatalog.All;
+
+    public IReadOnlyList<string> PlaceSuggestions() => StaticSriLankaCityTable.SuggestionNames();
 
     public async Task<SpecialtyResolutionDto> SuggestSpecialtyAsync(
         Guid patientId, Guid? alertId, string? specialtyOverride, CancellationToken ct = default) =>
@@ -88,7 +91,8 @@ public sealed class DoctorRecommendationService(
                 status: "location_not_found",
                 providerStatus: "location_not_found",
                 message: $"We couldn't find {request.LocationText.Trim()}. Try a nearby town or district.",
-                results: []);
+                results: [],
+                suggestedPlaces: StaticSriLankaCityTable.SuggestionNames());
         }
 
         if (geo.Status != GeocodeStatus.Ok || geo.Latitude is null || geo.Longitude is null)
@@ -135,10 +139,16 @@ public sealed class DoctorRecommendationService(
             _ => "failed"
         };
 
+        var useStale = providerResult.Status == ProviderStatus.Failed
+            && providerResult.StaleCache
+            && providerResult.Facilities.Count > 0;
+
         var ranked = ranking.Rank(
-            providerResult.Status == ProviderStatus.Ok ? providerResult.Facilities : [],
+            providerResult.Status == ProviderStatus.Ok || useStale ? providerResult.Facilities : [],
             specialty.Code,
             request.Availability);
+
+        var persistRows = providerResult.Status == ProviderStatus.Ok ? ranked : [];
 
         var fetchedAt = providerResult.FetchedAt ?? geo.FetchedAt;
         var persisted = await PersistAsync(
@@ -148,7 +158,7 @@ public sealed class DoctorRecommendationService(
             geo,
             status,
             usedRadius,
-            ranked,
+            persistRows,
             fetchedAt,
             providerResult.ServedFromCache,
             ct);
@@ -159,12 +169,16 @@ public sealed class DoctorRecommendationService(
                 "Facility search is not configured on this server yet. Location resolved; no clinics are shown.",
             ProviderStatus.Empty =>
                 $"No clinics or hospitals found within {usedRadius / 1000.0:0} km of {origin.ResolvedPlace} for {specialty.Label}.",
+            ProviderStatus.Failed when useStale =>
+                "We couldn't reach the map data service just now. Showing results cached on "
+                + (fetchedAt?.UtcDateTime.ToString("dd MMM yyyy, HH:mm", CultureInfo.InvariantCulture) ?? "an earlier fetch")
+                + " UTC rather than something unverified.",
             ProviderStatus.Failed =>
                 "We couldn't reach the map data service just now. Nothing is shown rather than showing you something unverified.",
             _ => null
         };
 
-        var attribution = providerResult.Status is ProviderStatus.Ok or ProviderStatus.Empty
+        var attribution = providerResult.Status is ProviderStatus.Ok or ProviderStatus.Empty || useStale
             ? OverpassProvider.Attribution
             : null;
 
@@ -182,7 +196,11 @@ public sealed class DoctorRecommendationService(
             ranked,
             attribution,
             ladder,
-            suggestedNext);
+            suggestedNext,
+            staleCache: useStale,
+            nearestLargerCity: providerResult.Status == ProviderStatus.Empty
+                ? StaticSriLankaCityTable.NearestOther(origin.Latitude, origin.Longitude, origin.ResolvedPlace)
+                : null);
     }
 
     private async Task<DoctorSearch> PersistAsync(
@@ -275,7 +293,10 @@ public sealed class DoctorRecommendationService(
         IReadOnlyList<FacilityResultDto> results,
         string? attribution = null,
         IReadOnlyList<int>? radiusLadderUsed = null,
-        int? suggestedNextRadiusMeters = null) =>
+        int? suggestedNextRadiusMeters = null,
+        bool staleCache = false,
+        string? nearestLargerCity = null,
+        IReadOnlyList<string>? suggestedPlaces = null) =>
         new()
         {
             SearchId = row.Id,
@@ -291,7 +312,10 @@ public sealed class DoctorRecommendationService(
             Attribution = attribution,
             Results = results,
             Message = message,
-            SuggestedNextRadiusMeters = suggestedNextRadiusMeters
+            SuggestedNextRadiusMeters = suggestedNextRadiusMeters,
+            StaleCache = staleCache,
+            NearestLargerCity = nearestLargerCity,
+            SuggestedPlaces = suggestedPlaces
         };
 
     private async Task<SpecialtyResolution> ResolveSpecialtyAsync(

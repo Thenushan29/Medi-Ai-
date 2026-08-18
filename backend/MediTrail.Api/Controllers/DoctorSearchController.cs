@@ -28,6 +28,15 @@ public sealed class DoctorSearchController(
         return Ok(doctors.Specialties());
     }
 
+    [HttpGet("places")]
+    [ProducesResponseType<IReadOnlyList<string>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status404NotFound)]
+    public ActionResult<IReadOnlyList<string>> Places()
+    {
+        if (!_enabled) return NotFound(Disabled());
+        return Ok(doctors.PlaceSuggestions());
+    }
+
     [HttpGet("patients/{patientId:guid}/specialty-suggestion")]
     [ProducesResponseType<SpecialtyResolutionDto>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiError>(StatusCodes.Status404NotFound)]

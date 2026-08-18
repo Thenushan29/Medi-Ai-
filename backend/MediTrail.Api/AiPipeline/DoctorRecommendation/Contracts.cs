@@ -56,6 +56,9 @@ public sealed record ProviderResult
     public DateTimeOffset? FetchedAt { get; init; }
     public string? EndpointUsed { get; init; }
     public bool ServedFromCache { get; init; }
+
+    /// <summary>Expired cache shown after a live failure. Must be labelled stale, never live.</summary>
+    public bool StaleCache { get; init; }
 }
 
 public interface IDoctorSearchProvider
@@ -101,6 +104,8 @@ public interface IDoctorRecommendationService
         Guid patientId, CancellationToken ct = default);
 
     IReadOnlyList<Contracts.Api.SpecialtyOptionDto> Specialties();
+
+    IReadOnlyList<string> PlaceSuggestions();
 
     Task<Contracts.Api.SpecialtyResolutionDto> SuggestSpecialtyAsync(
         Guid patientId, Guid? alertId, string? specialtyOverride, CancellationToken ct = default);

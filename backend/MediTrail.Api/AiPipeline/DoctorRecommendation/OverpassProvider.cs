@@ -44,6 +44,21 @@ public sealed class OverpassProvider(
         if (live.Status is ProviderStatus.Ok or ProviderStatus.Empty)
         {
             await cache.SetAsync(CacheKeyPrefix, query, live, ct);
+            return live;
+        }
+
+        var stale = await cache.TryGetExpiredAsync(CacheKeyPrefix, query, ct);
+        if (stale is not null && stale.Facilities.Count > 0)
+        {
+            logger.LogInformation(
+                "Overpass live search failed; serving expired cache fetched at {FetchedAt:u}",
+                stale.FetchedAt);
+            return stale with
+            {
+                Status = ProviderStatus.Failed,
+                ServedFromCache = true,
+                StaleCache = true
+            };
         }
 
         return live;

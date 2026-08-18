@@ -203,21 +203,103 @@ const AVAILABILITY: { value: AvailabilityWindow; label: string; hint: string }[]
                 <div class="h-40 animate-pulse rounded-xl bg-slate-100"></div>
               </div>
             } @else if (searchResult(); as result) {
-              <p class="text-sm text-slate-600">
-                {{ result.message ?? facilityCountLabel(result.results?.length ?? 0) }}
-              </p>
-              @if (result.origin?.resolvedPlace || result.radiusMeters) {
-                <p class="mt-1 text-xs text-slate-500">
-                  @if (result.origin?.resolvedPlace) {
-                    Near {{ result.origin.resolvedPlace }}
+              @if (result.status === 'empty') {
+                <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">No facilities in range</p>
+                  <p class="mt-2 text-sm leading-relaxed text-slate-800">
+                    {{ result.message ?? facilityCountLabel(0) }}
+                  </p>
+                  @if (result.nearestLargerCity) {
+                    <p class="mt-2 text-sm text-slate-600">
+                      Coverage is thinner outside large towns. The nearest other mapped town is
+                      <span class="font-medium">{{ result.nearestLargerCity }}</span>.
+                    </p>
                   }
-                  @if (result.radiusMeters) {
-                    · within {{ kmLabel(result.radiusMeters) }}
+                  <div class="mt-4 flex flex-col gap-2">
+                    @if (result.suggestedNextRadiusMeters) {
+                      <button
+                        type="button"
+                        class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+                        (click)="runSearch({ radiusMeters: result.suggestedNextRadiusMeters })"
+                      >
+                        Search within 40 km
+                      </button>
+                    }
+                    <button
+                      type="button"
+                      class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+                      (click)="searchAnySpecialty()"
+                    >
+                      Search all healthcare facilities, any specialty
+                    </button>
+                    @if (result.nearestLargerCity) {
+                      <button
+                        type="button"
+                        class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-brand-700"
+                        (click)="searchPlace(result.nearestLargerCity)"
+                      >
+                        Try {{ result.nearestLargerCity }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              } @else if (result.status === 'failed' || result.status === 'not_configured') {
+                <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-5">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-red-700">
+                    {{ result.status === 'not_configured' ? 'Search not configured' : 'Map data unreachable' }}
+                  </p>
+                  <p class="mt-2 text-sm leading-relaxed text-red-950">
+                    {{ result.message ?? 'We couldn\'t reach the map data service just now. Nothing is shown rather than showing you something unverified.' }}
+                  </p>
+                  @if (result.staleCache) {
+                    <p class="mt-3 inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900">
+                      Stale · showing results cached on {{ fetchedLabel(result.fetchedAtUtc) }}
+                    </p>
                   }
+                  <button
+                    type="button"
+                    class="mt-4 rounded-lg bg-red-800 px-3 py-2 text-sm font-medium text-white"
+                    (click)="runSearch()"
+                  >
+                    Try again
+                  </button>
+                </div>
+              } @else if (result.status === 'location_not_found') {
+                <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">Place not found</p>
+                  <p class="mt-2 text-sm leading-relaxed text-amber-950">
+                    {{ result.message ?? 'We couldn\'t find that place. Try a nearby town or district.' }}
+                  </p>
+                  <p class="mt-3 text-xs text-amber-900">Try a mapped town:</p>
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    @for (place of result.suggestedPlaces ?? places(); track place) {
+                      <button
+                        type="button"
+                        class="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-950"
+                        (click)="searchPlace(place)"
+                      >
+                        {{ place }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              } @else {
+                <p class="text-sm text-slate-600">
+                  {{ result.message ?? facilityCountLabel(result.results?.length ?? 0) }}
                 </p>
+                @if (result.origin?.resolvedPlace || result.radiusMeters) {
+                  <p class="mt-1 text-xs text-slate-500">
+                    @if (result.origin?.resolvedPlace) {
+                      Near {{ result.origin.resolvedPlace }}
+                    }
+                    @if (result.radiusMeters) {
+                      · within {{ kmLabel(result.radiusMeters) }}
+                    }
+                  </p>
+                }
               }
 
-              @if (result.status === 'ok' && (result.results?.length ?? 0) > 0) {
+              @if (showFacilityCards(result)) {
                 <ul class="mt-4 space-y-4">
                   @for (facility of result.results; track facility.sourceRef) {
                     <li class="rounded-xl border border-slate-200 bg-white px-4 py-4">
@@ -308,6 +390,9 @@ const AVAILABILITY: { value: AvailabilityWindow; label: string; hint: string }[]
                           @if (result.servedFromCache) {
                             · cached
                           }
+                          @if (result.staleCache) {
+                            · stale
+                          }
                         </p>
                       </div>
                     </li>
@@ -353,7 +438,7 @@ const AVAILABILITY: { value: AvailabilityWindow; label: string; hint: string }[]
                 type="button"
                 class="flex-1 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
                 [disabled]="!canSearch()"
-                (click)="runSearch()"
+                (click)="runSearch({ resetRadius: true })"
               >
                 Search
               </button>
@@ -392,6 +477,8 @@ export class DoctorSearchDrawerComponent {
   protected readonly searching = signal(false);
   protected readonly searchResult = signal<DoctorSearchResponse | null>(null);
   protected readonly rankOpen = signal<Record<string, boolean>>({});
+  protected readonly places = signal<string[]>([]);
+  protected readonly searchRadius = signal<number | null>(null);
 
   protected readonly canSearch = computed(() => {
     const located =
@@ -443,7 +530,34 @@ export class DoctorSearchDrawerComponent {
     );
   }
 
-  protected runSearch(): void {
+  protected runSearch(opts?: {
+    radiusMeters?: number;
+    specialtyOverride?: string;
+    locationText?: string;
+    resetRadius?: boolean;
+  }): void {
+    if (opts?.locationText != null) {
+      this.locationText.set(opts.locationText);
+      this.usingDevice.set(false);
+      this.latitude.set(null);
+      this.longitude.set(null);
+    }
+    if (opts?.specialtyOverride) {
+      const match = this.specialties().find(s => s.code === opts.specialtyOverride);
+      const current = this.suggestion();
+      if (current) {
+        this.suggestion.set({
+          ...current,
+          code: opts.specialtyOverride,
+          label: match?.label ?? opts.specialtyOverride,
+          resolvedBy: 'user_override',
+          reason: 'Chosen from the specialty list.'
+        });
+      }
+    }
+    if (opts?.resetRadius) this.searchRadius.set(null);
+    if (opts?.radiusMeters != null) this.searchRadius.set(opts.radiusMeters);
+
     if (!this.canSearch()) return;
     const specialty = this.suggestion();
     const when = this.availability();
@@ -462,6 +576,8 @@ export class DoctorSearchDrawerComponent {
       body.latitude = lat;
       body.longitude = lng;
     }
+    const radius = this.searchRadius();
+    if (radius !== null) body.radiusMeters = radius;
 
     this.searching.set(true);
     this.searchError.set(null);
@@ -480,6 +596,22 @@ export class DoctorSearchDrawerComponent {
         this.step.set(2);
       }
     });
+  }
+
+  protected searchAnySpecialty(): void {
+    this.runSearch({ specialtyOverride: 'general_practice' });
+  }
+
+  protected searchPlace(place: string): void {
+    this.runSearch({ locationText: place, resetRadius: true });
+  }
+
+  protected showFacilityCards(result: DoctorSearchResponse): boolean {
+    const count = result.results?.length ?? 0;
+    if (count === 0) return false;
+    if (result.status === 'empty' || result.status === 'location_not_found') return false;
+    if (result.status === 'ok') return true;
+    return result.status === 'failed' && result.staleCache === true;
   }
 
   protected facilityCountLabel(count: number): string {
@@ -558,6 +690,7 @@ export class DoctorSearchDrawerComponent {
       next: list => this.specialties.set(list),
       error: (err: Error) => this.error.set(err.message)
     });
+    this.api.getPlaces().subscribe({ next: list => this.places.set(list) });
     this.loadSuggestion();
   }
 

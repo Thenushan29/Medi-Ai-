@@ -64,6 +64,9 @@ public sealed record DoctorSearchResponseDto
     public IReadOnlyList<FacilityResultDto> Results { get; init; } = [];
     public string? Message { get; init; }
     public int? SuggestedNextRadiusMeters { get; init; }
+    public bool StaleCache { get; init; }
+    public string? NearestLargerCity { get; init; }
+    public IReadOnlyList<string>? SuggestedPlaces { get; init; }
 }
 
 public sealed record DoctorSearchSummaryDto

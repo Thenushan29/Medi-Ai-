@@ -404,4 +404,7 @@ export interface DoctorSearchResponse {
   results: FacilityResult[];
   message?: string;
   suggestedNextRadiusMeters?: number;
+  staleCache?: boolean;
+  nearestLargerCity?: string;
+  suggestedPlaces?: string[];
 }
