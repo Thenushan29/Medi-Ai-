@@ -408,3 +408,16 @@ export interface DoctorSearchResponse {
   nearestLargerCity?: string;
   suggestedPlaces?: string[];
 }
+
+export interface DoctorSearchSummary {
+  searchId: string;
+  specialtyCode: string;
+  specialtyLabel?: string;
+  locationText: string;
+  resolvedPlace?: string | null;
+  providerStatus: string;
+  resultCount: number;
+  createdAt: string;
+  fetchedAt?: string;
+  servedFromCache: boolean;
+}

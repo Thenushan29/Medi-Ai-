@@ -186,6 +186,13 @@ public class DoctorRecommendationServiceTests : IDisposable
         Assert.Equal(40000, response.SuggestedNextRadiusMeters);
         Assert.False(string.IsNullOrWhiteSpace(response.NearestLargerCity));
         Assert.NotEqual("Jaffna", response.NearestLargerCity);
+
+        var history = await service.ListAsync(_patientId);
+        var summary = Assert.Single(history);
+        Assert.Equal("general_practice", summary.SpecialtyCode);
+        Assert.Equal("General practice", summary.SpecialtyLabel);
+        Assert.Equal("empty", summary.ProviderStatus);
+        Assert.Equal(0, summary.ResultCount);
     }
 
     [Fact]

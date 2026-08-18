@@ -45,6 +45,7 @@ public sealed class DoctorRecommendationService(
         {
             SearchId = s.Id,
             SpecialtyCode = s.SpecialtyCode,
+            SpecialtyLabel = SpecialtyCatalog.LabelFor(s.SpecialtyCode),
             LocationText = s.LocationText,
             ResolvedPlace = s.ResolvedPlace,
             ProviderStatus = s.ProviderStatus,

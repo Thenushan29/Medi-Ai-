@@ -9,7 +9,7 @@ import { ChatDrawerComponent } from './chat-drawer.component';
 import { DoctorSearchDrawerComponent } from '../doctor-search/doctor-search-drawer.component';
 import { LabTrendsViewComponent } from './lab-trends-view.component';
 import { MedicationsViewComponent } from './medications-view.component';
-import type { Alert, LabTrend, MedicationGroup, PatientDetail, TimelineEntry } from '../../core/models';
+import type { Alert, DoctorSearchSummary, LabTrend, MedicationGroup, PatientDetail, TimelineEntry } from '../../core/models';
 
 type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
 
@@ -86,6 +86,41 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
             <p class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {{ p.statusMessage }}
             </p>
+          }
+
+          @if (doctorSearches().length > 0) {
+            <section class="mt-5 rounded-xl border border-slate-200 bg-white px-4 py-3" aria-labelledby="recent-doctor-searches">
+              <h2 id="recent-doctor-searches" class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Recent doctor searches
+              </h2>
+              <ul class="mt-2 divide-y divide-slate-100">
+                @for (row of doctorSearches(); track row.searchId) {
+                  <li class="flex flex-wrap items-baseline justify-between gap-2 py-2 text-sm">
+                    <div class="min-w-0">
+                      <p class="text-slate-800">
+                        {{ row.specialtyLabel || row.specialtyCode }}
+                        ·
+                        {{ placeLabel(row) }}
+                      </p>
+                      <p class="mt-0.5 text-xs text-slate-500">
+                        {{ searchStatusLabel(row.providerStatus) }}
+                        ·
+                        {{ resultCountLabel(row.resultCount) }}
+                        @if (row.servedFromCache) {
+                          · cached
+                        }
+                        @if (row.fetchedAt) {
+                          · fetched {{ row.fetchedAt | date: 'medium' }}
+                        }
+                      </p>
+                    </div>
+                    <time class="shrink-0 text-xs text-slate-400" [attr.datetime]="row.createdAt">
+                      {{ row.createdAt | date: 'medium' }}
+                    </time>
+                  </li>
+                }
+              </ul>
+            </section>
           }
         </header>
 
@@ -252,7 +287,7 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
           <mt-doctor-search-drawer
             [patientId]="p.id"
             [alert]="alert"
-            (closed)="doctorAlert.set(null)"
+            (closed)="closeDoctorSearch()"
           />
         }
       } @else if (error(); as message) {
@@ -271,6 +306,38 @@ export class DashboardPageComponent {
   protected openDoctorSearch(alert: Alert): void {
     this.chatOpen.set(false);
     this.doctorAlert.set(alert);
+  }
+
+  protected closeDoctorSearch(): void {
+    this.doctorAlert.set(null);
+    this.loadDoctorSearches();
+  }
+
+  protected placeLabel(row: DoctorSearchSummary): string {
+    const place = row.resolvedPlace?.trim() || row.locationText?.trim();
+    return place ? place : 'Not listed';
+  }
+
+  protected searchStatusLabel(status: string): string {
+    switch (status) {
+      case 'ok':
+        return 'Facilities returned';
+      case 'empty':
+        return 'No facilities in range';
+      case 'failed':
+        return 'Map data unreachable';
+      case 'location_not_found':
+        return 'Place not found';
+      case 'not_configured':
+        return 'Search not configured';
+      default:
+        return status;
+    }
+  }
+
+  protected resultCountLabel(count: number): string {
+    if (count === 1) return '1 result';
+    return `${count} results`;
   }
 
   /**
@@ -322,6 +389,7 @@ export class DashboardPageComponent {
   protected readonly labTrends = signal<LabTrend[]>([]);
   protected readonly chatOpen = signal(false);
   protected readonly doctorAlert = signal<Alert | null>(null);
+  protected readonly doctorSearches = signal<DoctorSearchSummary[]>([]);
   protected readonly error = signal<string | null>(null);
 
   /** "2021 – 2024", or a single year when everything falls in one (§10.4 header chips). */
@@ -358,5 +426,13 @@ export class DashboardPageComponent {
     this.api.getAlerts(id).subscribe({ next: alerts => this.alerts.set(alerts) });
     this.api.getMedications(id).subscribe({ next: groups => this.medications.set(groups) });
     this.api.getLabTrends(id).subscribe({ next: trends => this.labTrends.set(trends) });
+    this.loadDoctorSearches();
+  }
+
+  private loadDoctorSearches(): void {
+    this.api.listDoctorSearches(this.patientId()).subscribe({
+      next: rows => this.doctorSearches.set(rows),
+      error: () => this.doctorSearches.set([])
+    });
   }
 }

@@ -139,6 +139,7 @@ export class AlertsViewComponent {
   readonly alerts = input.required<Alert[]>();
   readonly findDoctor = output<Alert>();
 
+  /** Shown on Red, Amber, consult-flagged, or low-confidence findings. Hidden on Info + high confidence. */
   protected showFindDoctor(alert: Alert): boolean {
     return (
       alert.severity === 'Red' ||

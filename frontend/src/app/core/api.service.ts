@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, catchError, throwError } from 'rxjs';
+import { Observable, catchError, of, throwError } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import type {
@@ -11,6 +11,7 @@ import type {
   CreateDoctorSearchRequest,
   CreatePatientRequest,
   DoctorSearchResponse,
+  DoctorSearchSummary,
   DocumentDetail,
   LabTrend,
   MedicationGroup,
@@ -166,6 +167,16 @@ export class ApiService {
 
   getPlaces(): Observable<string[]> {
     return this.http.get<string[]>(`${this.base}/places`).pipe(catchError(toReadableError));
+  }
+
+  listDoctorSearches(patientId: string): Observable<DoctorSearchSummary[]> {
+    return this.http
+      .get<DoctorSearchSummary[]>(`${this.base}/patients/${patientId}/doctor-searches`)
+      .pipe(
+        catchError((err: HttpErrorResponse) =>
+          err.status === 404 ? of([]) : toReadableError(err)
+        )
+      );
   }
 }
 

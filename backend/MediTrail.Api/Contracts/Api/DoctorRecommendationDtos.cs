@@ -73,6 +73,7 @@ public sealed record DoctorSearchSummaryDto
 {
     public required Guid SearchId { get; init; }
     public required string SpecialtyCode { get; init; }
+    public required string SpecialtyLabel { get; init; }
     public required string LocationText { get; init; }
     public string? ResolvedPlace { get; init; }
     public required string ProviderStatus { get; init; }
