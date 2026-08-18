@@ -109,24 +109,12 @@ public sealed class DoctorRecommendationService(
         var fallbackRadius = _options.FallbackRadiusMeters;
         var ladder = new List<int> { firstRadius };
 
-        var providerResult = await searchProvider.SearchAsync(new ProviderQuery
-        {
-            Latitude = origin.Latitude,
-            Longitude = origin.Longitude,
-            RadiusMeters = firstRadius,
-            SpecialtyCode = specialty.Code
-        }, ct);
+        var providerResult = await SearchProviderAsync(origin, firstRadius, specialty.Code, ct);
 
         if (providerResult.Status == ProviderStatus.Empty && firstRadius < fallbackRadius)
         {
             ladder.Add(fallbackRadius);
-            providerResult = await searchProvider.SearchAsync(new ProviderQuery
-            {
-                Latitude = origin.Latitude,
-                Longitude = origin.Longitude,
-                RadiusMeters = fallbackRadius,
-                SpecialtyCode = specialty.Code
-            }, ct);
+            providerResult = await SearchProviderAsync(origin, fallbackRadius, specialty.Code, ct);
         }
 
         var usedRadius = ladder[^1];
@@ -335,6 +323,29 @@ public sealed class DoctorRecommendationService(
             LabTestKeys = labKeys.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             Override = request.SpecialtyOverride
         }, ct);
+    }
+
+    private async Task<ProviderResult> SearchProviderAsync(
+        SearchOriginDto origin, int radiusMeters, string specialtyCode, CancellationToken ct)
+    {
+        try
+        {
+            return await searchProvider.SearchAsync(new ProviderQuery
+            {
+                Latitude = origin.Latitude,
+                Longitude = origin.Longitude,
+                RadiusMeters = radiusMeters,
+                SpecialtyCode = specialtyCode
+            }, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return new ProviderResult { Status = ProviderStatus.Failed, Facilities = [] };
+        }
     }
 
     private static IEnumerable<string> LabKeysIn(string? text)
