@@ -79,7 +79,7 @@ public sealed class DoctorRecommendationService(
 
         if (geo.Status == GeocodeStatus.LocationNotFound)
         {
-            var missing = await PersistAsync(patientId, request, specialty, geo, "location_not_found", 0, ct);
+            var missing = await PersistAsync(patientId, request, specialty, geo, "location_not_found", 0, geo.FetchedAt, ct);
             return Respond(
                 missing,
                 specialty,
@@ -92,7 +92,7 @@ public sealed class DoctorRecommendationService(
 
         if (geo.Status != GeocodeStatus.Ok || geo.Latitude is null || geo.Longitude is null)
         {
-            var failed = await PersistAsync(patientId, request, specialty, geo, "failed", 0, ct);
+            var failed = await PersistAsync(patientId, request, specialty, geo, "failed", 0, geo.FetchedAt, ct);
             return Respond(
                 failed,
                 specialty,
@@ -128,8 +128,9 @@ public sealed class DoctorRecommendationService(
             _ => "failed"
         };
 
+        var fetchedAt = providerResult.FetchedAt ?? geo.FetchedAt;
         var persisted = await PersistAsync(
-            patientId, request, specialty, geo, status, providerResult.Facilities.Count, ct);
+            patientId, request, specialty, geo, status, providerResult.Facilities.Count, fetchedAt, ct);
 
         var message = providerResult.Status switch
         {
@@ -142,7 +143,19 @@ public sealed class DoctorRecommendationService(
             _ => null
         };
 
-        return Respond(persisted, specialty, origin, status, status, message, []);
+        var attribution = providerResult.Status is ProviderStatus.Ok or ProviderStatus.Empty
+            ? OverpassProvider.Attribution
+            : null;
+
+        return Respond(
+            persisted,
+            specialty,
+            origin,
+            status,
+            status,
+            message,
+            MapFacilities(providerResult),
+            attribution);
     }
 
     private async Task<DoctorSearch> PersistAsync(
@@ -152,6 +165,7 @@ public sealed class DoctorRecommendationService(
         GeocodeResult geo,
         string providerStatus,
         int resultCount,
+        DateTimeOffset? fetchedAt,
         CancellationToken ct)
     {
         var row = new DoctorSearch
@@ -170,7 +184,7 @@ public sealed class DoctorRecommendationService(
             ProviderStatus = providerStatus,
             ServedFromCache = geo.ServedFromCache,
             ResultCount = resultCount,
-            FetchedAt = geo.FetchedAt
+            FetchedAt = fetchedAt
         };
 
         db.DoctorSearches.Add(row);
@@ -193,7 +207,8 @@ public sealed class DoctorRecommendationService(
         string status,
         string providerStatus,
         string? message,
-        IReadOnlyList<FacilityResultDto> results) =>
+        IReadOnlyList<FacilityResultDto> results,
+        string? attribution = null) =>
         new()
         {
             SearchId = row.Id,
@@ -205,7 +220,34 @@ public sealed class DoctorRecommendationService(
             ProviderStatus = providerStatus,
             ServedFromCache = row.ServedFromCache,
             FetchedAtUtc = row.FetchedAt,
+            Attribution = attribution,
             Results = results,
             Message = message
         };
+
+    private static IReadOnlyList<FacilityResultDto> MapFacilities(ProviderResult providerResult)
+    {
+        if (providerResult.Status != ProviderStatus.Ok) return [];
+
+        return providerResult.Facilities.Select(f => new FacilityResultDto
+        {
+            SourceRef = f.SourceRef,
+            Name = f.Name,
+            Category = f.Category,
+            SpecialtyTag = f.SpecialtyTag,
+            Address = f.Address,
+            DistanceMeters = f.DistanceMeters,
+            Phone = f.Phone,
+            Website = f.Website,
+            OpeningHours = f.OpeningHours,
+            AvailabilityMatch = "unknown",
+            RankScore = 0,
+            RankReasons = [],
+            MapUrl = f.Source == "openstreetmap"
+                ? $"https://www.openstreetmap.org/{f.SourceRef}"
+                : null,
+            Latitude = f.Latitude,
+            Longitude = f.Longitude
+        }).ToList();
+    }
 }

@@ -3,8 +3,8 @@ using MediTrail.Api.Contracts.Api;
 namespace MediTrail.Api.AiPipeline.DoctorRecommendation;
 
 /// <summary>
-/// Placeholder until T4. A missing provider is <see cref="ProviderStatus.NotConfigured"/>,
-/// not Failed and not Empty.
+/// Used when <c>DoctorRecommendation:Provider</c> is not overpass, and in tests.
+/// A missing provider is <see cref="ProviderStatus.NotConfigured"/>, not Failed and not Empty.
 /// </summary>
 public sealed class NotConfiguredDoctorSearchProvider : IDoctorSearchProvider
 {

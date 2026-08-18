@@ -119,14 +119,28 @@ builder.Services.AddScoped<IAnalysisService, AnalysisService>();
 builder.Services.AddScoped<ITrendAnalyzer, TrendAnalyzer>();
 builder.Services.AddScoped<IGroundedChatService, GroundedChatService>();
 builder.Services.AddScoped<IGeocoder, Geocoder>();
-builder.Services.AddScoped<IDoctorSearchProvider, NotConfiguredDoctorSearchProvider>();
+builder.Services.AddScoped<NotConfiguredDoctorSearchProvider>();
 builder.Services.AddScoped<IDoctorRecommendationService, DoctorRecommendationService>();
+builder.Services.AddScoped<IDoctorSearchProvider>(provider =>
+{
+    var opt = provider.GetRequiredService<IOptions<DoctorRecommendationOptions>>().Value;
+    return string.Equals(opt.Provider, "overpass", StringComparison.OrdinalIgnoreCase)
+        ? provider.GetRequiredService<OverpassProvider>()
+        : provider.GetRequiredService<NotConfiguredDoctorSearchProvider>();
+});
 
 builder.Services.AddHttpClient<INominatimClient, NominatimClient>((provider, client) =>
 {
     var opt = provider.GetRequiredService<IOptions<DoctorRecommendationOptions>>().Value;
     client.BaseAddress = new Uri(opt.NominatimBaseUrl.TrimEnd('/') + "/");
     client.Timeout = TimeSpan.FromSeconds(opt.NominatimTimeoutSeconds);
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", opt.NominatimUserAgent);
+});
+
+builder.Services.AddHttpClient<OverpassProvider>((provider, client) =>
+{
+    var opt = provider.GetRequiredService<IOptions<DoctorRecommendationOptions>>().Value;
+    client.Timeout = TimeSpan.FromSeconds(opt.OverpassTimeoutSeconds);
     client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", opt.NominatimUserAgent);
 });
 

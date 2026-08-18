@@ -29,6 +29,10 @@ public sealed record NormalizedFacility
     public string? Address { get; init; }
     public required double Latitude { get; init; }
     public required double Longitude { get; init; }
+
+    /// <summary>Straight-line (Haversine) metres from the search origin. Never a road distance.</summary>
+    public required int DistanceMeters { get; init; }
+
     public string? Phone { get; init; }
     public string? Website { get; init; }
     public string? OpeningHours { get; init; }
