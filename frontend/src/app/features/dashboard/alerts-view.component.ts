@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { LanguageService } from '../../core/language.service';
@@ -111,6 +111,22 @@ import type { Alert, AlertSeverity, VerificationStatus } from '../../core/models
                 }
               </p>
             }
+
+            @if (showFindDoctor(alert)) {
+              <div class="border-t border-slate-100 px-5 py-3">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-2 rounded-lg border border-brand-500 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50"
+                  (click)="findDoctor.emit(alert)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s7-4.4 7-10a7 7 0 1 0-14 0c0 5.6 7 10 7 10z" />
+                    <circle cx="12" cy="11" r="2.5" />
+                  </svg>
+                  Find a doctor near me
+                </button>
+              </div>
+            }
           </li>
         }
       </ul>
@@ -121,6 +137,16 @@ export class AlertsViewComponent {
   protected readonly language = inject(LanguageService);
 
   readonly alerts = input.required<Alert[]>();
+  readonly findDoctor = output<Alert>();
+
+  protected showFindDoctor(alert: Alert): boolean {
+    return (
+      alert.severity === 'Red' ||
+      alert.severity === 'Amber' ||
+      alert.requiresProfessionalConsult ||
+      alert.confidence < 50
+    );
+  }
 
   protected action(alert: Alert): string {
     return this.language.pick(alert.suggestedActionEn, alert.suggestedActionTa);

@@ -101,4 +101,7 @@ public interface IDoctorRecommendationService
         Guid patientId, CancellationToken ct = default);
 
     IReadOnlyList<Contracts.Api.SpecialtyOptionDto> Specialties();
+
+    Task<Contracts.Api.SpecialtyResolutionDto> SuggestSpecialtyAsync(
+        Guid patientId, Guid? alertId, string? specialtyOverride, CancellationToken ct = default);
 }

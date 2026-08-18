@@ -330,3 +330,24 @@ export function confidenceBand(score: number | null | undefined): ConfidenceBand
   if (score >= 50) return 'medium';
   return 'low';
 }
+
+export interface SpecialtyOption {
+  code: string;
+  label: string;
+}
+
+export interface SpecialtyEvidence {
+  type: string;
+  label: string;
+  source?: string;
+  sourceId?: string;
+  sourceUrl?: string;
+}
+
+export interface SpecialtyResolution {
+  code: string;
+  label: string;
+  resolvedBy: string;
+  reason: string;
+  evidence: SpecialtyEvidence[];
+}

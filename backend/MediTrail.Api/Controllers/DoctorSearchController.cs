@@ -28,6 +28,17 @@ public sealed class DoctorSearchController(
         return Ok(doctors.Specialties());
     }
 
+    [HttpGet("patients/{patientId:guid}/specialty-suggestion")]
+    [ProducesResponseType<SpecialtyResolutionDto>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SpecialtyResolutionDto>> SuggestSpecialty(
+        Guid patientId, [FromQuery] Guid? alertId, [FromQuery] string? specialtyOverride, CancellationToken ct)
+    {
+        if (!_enabled) return NotFound(Disabled());
+        if (await patients.GetAsync(patientId, ct) is null) return NotFound(PatientMissing(patientId));
+        return Ok(await doctors.SuggestSpecialtyAsync(patientId, alertId, specialtyOverride, ct));
+    }
+
     [HttpGet("patients/{patientId:guid}/doctor-searches")]
     [ProducesResponseType<IReadOnlyList<DoctorSearchSummaryDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ApiError>(StatusCodes.Status404NotFound)]

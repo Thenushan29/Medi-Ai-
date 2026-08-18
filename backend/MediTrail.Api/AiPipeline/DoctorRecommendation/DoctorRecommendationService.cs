@@ -20,6 +20,15 @@ public sealed class DoctorRecommendationService(
 
     public IReadOnlyList<SpecialtyOptionDto> Specialties() => SpecialtyCatalog.All;
 
+    public async Task<SpecialtyResolutionDto> SuggestSpecialtyAsync(
+        Guid patientId, Guid? alertId, string? specialtyOverride, CancellationToken ct = default) =>
+        (await ResolveSpecialtyAsync(patientId, new DoctorSearchRequest
+        {
+            AlertId = alertId,
+            SpecialtyOverride = specialtyOverride,
+            LocationText = string.Empty
+        }, ct)).ToDto();
+
     public async Task<IReadOnlyList<DoctorSearchSummaryDto>> ListAsync(
         Guid patientId, CancellationToken ct = default)
     {

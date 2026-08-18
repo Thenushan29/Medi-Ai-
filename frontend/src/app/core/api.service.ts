@@ -15,6 +15,8 @@ import type {
   PatientDetail,
   PatientSummary,
   ProcessingStatus,
+  SpecialtyOption,
+  SpecialtyResolution,
   TimelineEntry,
   UploadResult
 } from './models';
@@ -116,11 +118,6 @@ export class ApiService {
       .pipe(catchError(toReadableError));
   }
 
-  /**
-   * `history` carries the completed turns of the open drawer so a follow-up has something to
-   * resolve against. Held by the client only — nothing is stored, and the server trims it again
-   * before it reaches the prompt.
-   */
   /** The stored conversation, so reopening the drawer resumes it rather than starting over. */
   getChatHistory(patientId: string): Observable<ChatMessage[]> {
     return this.http
@@ -128,9 +125,34 @@ export class ApiService {
       .pipe(catchError(toReadableError));
   }
 
+  /**
+   * `history` carries the completed turns of the open drawer so a follow-up has something to
+   * resolve against. Held by the client only — nothing is stored, and the server trims it again
+   * before it reaches the prompt.
+   */
   ask(patientId: string, question: string, history: ChatTurn[] = []): Observable<ChatAnswer> {
     return this.http
       .post<ChatAnswer>(`${this.base}/patients/${patientId}/ask`, { question, history })
+      .pipe(catchError(toReadableError));
+  }
+
+  getSpecialties(): Observable<SpecialtyOption[]> {
+    return this.http
+      .get<SpecialtyOption[]>(`${this.base}/specialties`)
+      .pipe(catchError(toReadableError));
+  }
+
+  suggestSpecialty(
+    patientId: string,
+    alertId?: string,
+    specialtyOverride?: string | null
+  ): Observable<SpecialtyResolution> {
+    const params: Record<string, string> = {};
+    if (alertId) params['alertId'] = alertId;
+    if (specialtyOverride) params['specialtyOverride'] = specialtyOverride;
+
+    return this.http
+      .get<SpecialtyResolution>(`${this.base}/patients/${patientId}/specialty-suggestion`, { params })
       .pipe(catchError(toReadableError));
   }
 }

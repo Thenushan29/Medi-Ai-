@@ -25,6 +25,19 @@ public class DoctorRecommendationServiceTests : IDisposable
     public void Dispose() => _db.Dispose();
 
     [Fact]
+    public async Task SuggestSpecialty_Does_Not_Persist_A_Search()
+    {
+        var service = CreateService(OkJaffna());
+
+        var result = await service.SuggestSpecialtyAsync(_patientId, null, "cardiology");
+
+        Assert.Equal("cardiology", result.Code);
+        Assert.Equal("user_override", result.ResolvedBy);
+        Assert.Empty(_db.DoctorSearches);
+        Assert.Empty(_db.DoctorSearchResults);
+    }
+
+    [Fact]
     public async Task LocationNotFound_Persists_Zero_Results_And_Distinct_Status()
     {
         var service = CreateService(new StubGeocoder(new GeocodeResult
@@ -224,14 +237,28 @@ public class DoctorRecommendationServiceTests : IDisposable
 
     private sealed class StubResolver : ISpecialtyResolver
     {
-        public Task<SpecialtyResolution> ResolveAsync(SpecialtyContext context, CancellationToken ct = default) =>
-            Task.FromResult(new SpecialtyResolution
+        public Task<SpecialtyResolution> ResolveAsync(SpecialtyContext context, CancellationToken ct = default)
+        {
+            if (!string.IsNullOrWhiteSpace(context.Override))
+            {
+                var code = context.Override.Trim();
+                return Task.FromResult(new SpecialtyResolution
+                {
+                    Code = code,
+                    Label = SpecialtyCatalog.LabelFor(code),
+                    ResolvedBy = "user_override",
+                    Reason = "Chosen from the specialty list."
+                });
+            }
+
+            return Task.FromResult(new SpecialtyResolution
             {
                 Code = "general_practice",
                 Label = "General practice",
                 ResolvedBy = "fallback",
                 Reason = SpecialtyMaps.NoSignalReason
             });
+        }
     }
 
     private sealed class LadderProvider : IDoctorSearchProvider

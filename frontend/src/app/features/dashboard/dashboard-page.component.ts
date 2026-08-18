@@ -6,6 +6,7 @@ import { ApiService } from '../../core/api.service';
 import { ConfidenceBadgeComponent } from '../../shared/confidence-badge.component';
 import { AlertsViewComponent } from './alerts-view.component';
 import { ChatDrawerComponent } from './chat-drawer.component';
+import { DoctorSearchDrawerComponent } from '../doctor-search/doctor-search-drawer.component';
 import { LabTrendsViewComponent } from './lab-trends-view.component';
 import { MedicationsViewComponent } from './medications-view.component';
 import type { Alert, LabTrend, MedicationGroup, PatientDetail, TimelineEntry } from '../../core/models';
@@ -23,7 +24,8 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
     AlertsViewComponent,
     MedicationsViewComponent,
     LabTrendsViewComponent,
-    ChatDrawerComponent
+    ChatDrawerComponent,
+    DoctorSearchDrawerComponent
   ],
   template: `
     <section class="mx-auto max-w-5xl px-6 py-10">
@@ -217,7 +219,7 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
               }
             }
             @case ('alerts') {
-              <mt-alerts-view [alerts]="alerts()" />
+              <mt-alerts-view [alerts]="alerts()" (findDoctor)="openDoctorSearch($event)" />
             }
             @case ('medications') {
               <mt-medications-view [groups]="medications()" />
@@ -245,6 +247,14 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
             (closed)="chatOpen.set(false)"
           />
         }
+
+        @if (doctorAlert(); as alert) {
+          <mt-doctor-search-drawer
+            [patientId]="p.id"
+            [alert]="alert"
+            (closed)="doctorAlert.set(null)"
+          />
+        }
       } @else if (error(); as message) {
         <p class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ message }}</p>
       } @else {
@@ -257,6 +267,11 @@ export class DashboardPageComponent {
   private readonly api = inject(ApiService);
 
   readonly patientId = input.required<string>();
+
+  protected openDoctorSearch(alert: Alert): void {
+    this.chatOpen.set(false);
+    this.doctorAlert.set(alert);
+  }
 
   /**
    * Removes one document — a page uploaded by mistake, or one that turned out to belong to
@@ -306,6 +321,7 @@ export class DashboardPageComponent {
   protected readonly medications = signal<MedicationGroup[]>([]);
   protected readonly labTrends = signal<LabTrend[]>([]);
   protected readonly chatOpen = signal(false);
+  protected readonly doctorAlert = signal<Alert | null>(null);
   protected readonly error = signal<string | null>(null);
 
   /** "2021 – 2024", or a single year when everything falls in one (§10.4 header chips). */
