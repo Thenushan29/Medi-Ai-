@@ -121,6 +121,7 @@ public class DoctorRecommendationServiceTests : IDisposable
             _db,
             geocoder,
             provider ?? new NotConfiguredDoctorSearchProvider(),
+            new StubResolver(),
             Options.Create(new DoctorRecommendationOptions()));
 
     private sealed class StubGeocoder(GeocodeResult result) : IGeocoder
@@ -135,5 +136,17 @@ public class DoctorRecommendationServiceTests : IDisposable
 
         public Task<ProviderResult> SearchAsync(ProviderQuery query, CancellationToken ct = default) =>
             Task.FromResult(result);
+    }
+
+    private sealed class StubResolver : ISpecialtyResolver
+    {
+        public Task<SpecialtyResolution> ResolveAsync(SpecialtyContext context, CancellationToken ct = default) =>
+            Task.FromResult(new SpecialtyResolution
+            {
+                Code = "general_practice",
+                Label = "General practice",
+                ResolvedBy = "fallback",
+                Reason = SpecialtyMaps.NoSignalReason
+            });
     }
 }

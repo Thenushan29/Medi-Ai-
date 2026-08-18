@@ -1,3 +1,4 @@
+using MediTrail.Api.AiPipeline.Normalization;
 using MediTrail.Api.Configuration;
 using MediTrail.Api.Contracts.Api;
 using MediTrail.Api.Data;
@@ -11,6 +12,7 @@ public sealed class DoctorRecommendationService(
     MediTrailDbContext db,
     IGeocoder geocoder,
     IDoctorSearchProvider searchProvider,
+    ISpecialtyResolver specialtyResolver,
     IOptions<DoctorRecommendationOptions> options) : IDoctorRecommendationService
 {
     private readonly DoctorRecommendationOptions _options = options.Value;
@@ -43,20 +45,7 @@ public sealed class DoctorRecommendationService(
     public async Task<DoctorSearchResponseDto> SearchAsync(
         Guid patientId, DoctorSearchRequest request, CancellationToken ct = default)
     {
-        var specialtyCode = string.IsNullOrWhiteSpace(request.SpecialtyOverride)
-            ? "general_practice"
-            : request.SpecialtyOverride.Trim();
-
-        var specialty = new SpecialtyResolutionDto
-        {
-            Code = specialtyCode,
-            Label = SpecialtyCatalog.All.FirstOrDefault(s => s.Code == specialtyCode)?.Label ?? specialtyCode,
-            ResolvedBy = string.IsNullOrWhiteSpace(request.SpecialtyOverride) ? "fallback" : "user_override",
-            Reason = string.IsNullOrWhiteSpace(request.SpecialtyOverride)
-                ? "General practice until medication-class evidence is resolved in a later step."
-                : "Chosen from the specialty list.",
-            Evidence = []
-        };
+        var specialty = (await ResolveSpecialtyAsync(patientId, request, ct)).ToDto();
 
         GeocodeResult geo;
         if (request.Latitude is not null && request.Longitude is not null)
@@ -119,7 +108,7 @@ public sealed class DoctorRecommendationService(
             Latitude = origin.Latitude,
             Longitude = origin.Longitude,
             RadiusMeters = radius,
-            SpecialtyCode = specialtyCode
+            SpecialtyCode = specialty.Code
         }, ct);
 
         var status = providerResult.Status switch
@@ -206,6 +195,18 @@ public sealed class DoctorRecommendationService(
             Label = specialty.Reason,
             Source = specialty.ResolvedBy
         });
+        foreach (var item in specialty.Evidence)
+        {
+            db.SpecialtyEvidence.Add(new SpecialtyEvidence
+            {
+                SearchId = row.Id,
+                EvidenceType = item.Type,
+                Label = item.Label,
+                Source = item.Source,
+                SourceId = item.SourceId,
+                SourceUrl = item.SourceUrl
+            });
+        }
 
         await db.SaveChangesAsync(ct);
         return row;
@@ -260,5 +261,56 @@ public sealed class DoctorRecommendationService(
             Latitude = f.Latitude,
             Longitude = f.Longitude
         }).ToList();
+    }
+
+    private async Task<SpecialtyResolution> ResolveSpecialtyAsync(
+        Guid patientId, DoctorSearchRequest request, CancellationToken ct)
+    {
+        Alert? alert = null;
+        if (request.AlertId is Guid alertId)
+        {
+            alert = await db.Alerts.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == alertId && a.PatientId == patientId, ct);
+        }
+
+        var labKeys = new List<string>();
+        if (alert is not null)
+        {
+            labKeys.AddRange(LabKeysIn(alert.Title));
+            labKeys.AddRange(LabKeysIn(alert.ExplanationEn));
+
+            if (alert.EvidenceDocumentIds.Count > 0)
+            {
+                var names = await db.LabResults.AsNoTracking()
+                    .Where(l => l.PatientId == patientId && alert.EvidenceDocumentIds.Contains(l.DocumentId))
+                    .Select(l => l.TestNameStandard ?? l.TestName)
+                    .ToListAsync(ct);
+
+                foreach (var name in names)
+                {
+                    var key = LabTestNormalizer.Standardize(name);
+                    if (key is not null) labKeys.Add(key);
+                }
+            }
+        }
+
+        return await specialtyResolver.ResolveAsync(new SpecialtyContext
+        {
+            AlertType = alert?.Type,
+            DrugNames = alert?.InvolvedGenerics ?? [],
+            LabTestKeys = labKeys.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            Override = request.SpecialtyOverride
+        }, ct);
+    }
+
+    private static IEnumerable<string> LabKeysIn(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) yield break;
+
+        foreach (var key in SpecialtyMaps.LabKeyToSpecialty.Keys)
+        {
+            if (text.Contains(key, StringComparison.OrdinalIgnoreCase))
+                yield return key;
+        }
     }
 }
