@@ -1,13 +1,19 @@
 # Database
 
-Supabase PostgreSQL. Six tables (PRD §12.3) plus one derived view.
+Supabase PostgreSQL. Eight tables and one derived view — the six of PRD §12.3, plus two added
+since:
+
+- `diagnoses` — §12.3 lists it as deferred and additive. Added when the grounded chat could not
+  answer "what was I given for malaria?" on a document that prints the word.
+- `chat_messages` — §5.2 excluded chat persistence as having no demo value, which held until the
+  drawer carried multi-turn context worth losing on close.
 
 ## Apply
 
 Run in order in the Supabase SQL editor (or via `psql`):
 
-1. `01_schema.sql` — generated from the EF Core migration, idempotent. Creates `patients`,
-   `documents`, `medications`, `lab_results`, `allergies`, `alerts`.
+1. `01_schema.sql` — generated from the EF Core migrations, idempotent. Creates `patients`,
+   `documents`, `medications`, `diagnoses`, `lab_results`, `allergies`, `alerts`, `chat_messages`.
 2. `02_views.sql` — `v_patient_timeline`. Re-runnable.
 
 ```bash

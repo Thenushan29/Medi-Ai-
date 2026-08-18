@@ -6,6 +6,7 @@ using MediTrail.Api.AiPipeline.Providers;
 using MediTrail.Api.Configuration;
 using MediTrail.Api.Contracts.Extraction;
 using MediTrail.GoldenRunner;
+using MediTrail.GoldenRunner.Traps;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -24,6 +25,14 @@ var repoRoot = FindRepositoryRoot();
 var datasetDir = Path.Combine(repoRoot, "dataset");
 var goldenDir = Path.Combine(datasetDir, "golden");
 var filter = args.FirstOrDefault(a => !a.StartsWith('-'));
+
+// Trap verification (§18.2) asks a different question from field accuracy (§18.1) — does a real
+// image become a raised alert — but it needs the same dataset and the same API key, so it lives
+// behind a mode switch here rather than in a second tool. See Traps/TrapRunner.cs.
+if (args.Contains("--traps"))
+{
+    return await TrapRunner.RunAsync(repoRoot, datasetDir, args);
+}
 
 if (!Directory.Exists(goldenDir))
 {
@@ -52,6 +61,10 @@ var services = new ServiceCollection();
 services.AddLogging(b => b.AddSimpleConsole(o => o.SingleLine = true).SetMinimumLevel(LogLevel.Warning));
 services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
 services.AddSingleton<IPromptLibrary, PromptLibrary>();
+// VisionDocumentExtractor took a dependency on this when PDF support landed (FR-2.7) and this
+// registration was not added with it, so the accuracy gate threw at startup before reading a
+// single document. §18.4 requires this run on every prompt change; it could not run at all.
+services.AddSingleton<IPdfRenderer, PdfRenderer>();
 // Same configuration path as the API — measuring against different settings than production
 // would make the accuracy figure meaningless.
 services.AddHttpClient<IAiClient, OpenAiCompatibleClient>((provider, client) =>

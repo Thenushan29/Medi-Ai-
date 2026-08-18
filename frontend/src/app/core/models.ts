@@ -42,6 +42,7 @@ export interface PatientSummary {
   documentCount: number;
   redAlertCount: number;
   amberAlertCount: number;
+  infoAlertCount: number;
   updatedAt: string;
   analyzedAt?: string;
 }
@@ -112,6 +113,8 @@ export interface TimelineEntry {
   failureReason?: string;
   overallConfidence?: number;
   legibilityNotes?: string;
+  /** Conditions named on the document, as printed. Transcribed, never MediTrail's conclusion. */
+  diagnoses: string[];
   medicationCount: number;
   labResultCount: number;
   outOfRangeCount: number;
@@ -192,7 +195,9 @@ export type AlertType =
   | 'DocumentWarningConflict'
   | 'LabOutOfRange'
   | 'LabDrift'
-  | 'LowExtractionConfidence';
+  | 'LowExtractionConfidence'
+  /** A medication whose active ingredient could not be resolved, so no cross-check covered it. */
+  | 'UnresolvedMedication';
 
 export interface EvidenceRef {
   documentId: string;
@@ -276,11 +281,33 @@ export interface LabTrendPoint {
   documentId: string;
 }
 
+/** One completed exchange, sent back so a follow-up can resolve against it. */
+export interface ChatTurn {
+  question: string;
+  answer: string;
+}
+
+/** A stored exchange, replayed into the drawer when it reopens. */
+export interface ChatMessage {
+  question: string;
+  answer: ChatAnswer;
+  askedAt: string;
+}
+
+/** How the question was written. Tanglish is Tamil in Latin script — its own answer language. */
+export type AskedLanguage = 'English' | 'Tamil' | 'Tanglish';
+
 export interface ChatAnswer {
   answerEn: string;
   answerTa?: string;
+  /** Present only when the question was asked in Tanglish. */
+  answerTanglish?: string;
+  askedLanguage: AskedLanguage;
   citations: string[];
+  /** Only meaningful when `foundInDocuments` is true; fixed by the server otherwise. */
   confidence: number;
+  /** Declined to judge safety — a refusal on principle, not an absent fact. */
+  safetyRefusal: boolean;
   consultProfessional: boolean;
   foundInDocuments: boolean;
 }

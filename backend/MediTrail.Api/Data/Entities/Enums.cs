@@ -45,7 +45,12 @@ public enum AlertType
     DocumentWarningConflict,
     LabOutOfRange,
     LabDrift,
-    LowExtractionConfidence
+    LowExtractionConfidence,
+    /// <summary>
+    /// A medication was read off the page but no generic could be resolved for it, so it took no
+    /// part in any cross-check. Says so, rather than leaving the gap silent (Principle 1).
+    /// </summary>
+    UnresolvedMedication
 }
 
 /// <summary>

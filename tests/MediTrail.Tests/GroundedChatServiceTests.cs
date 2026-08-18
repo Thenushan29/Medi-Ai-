@@ -1,3 +1,4 @@
+using MediTrail.Api.Contracts.Api;
 using System.Text.RegularExpressions;
 using MediTrail.Api.AiPipeline;
 using MediTrail.Api.AiPipeline.Chat;
@@ -184,6 +185,269 @@ public partial class GroundedChatServiceTests : IDisposable
         new(_db, new PromptLibrary(NullLogger<PromptLibrary>.Instance), new SingleService(_ai),
             NullLogger<GroundedChatService>.Instance);
 
+    /// <summary>
+    /// The reported defect, on patient_x_year1_1: the page prints "Diagnosis: MALARIA" directly
+    /// above four drugs, and "what medicines was I given for malaria?" answered "there is no
+    /// mention of any medicines given specifically for malaria". The model was right about what it
+    /// was handed — diagnoses were extracted, then dropped at the merge, so the word never reached
+    /// the record.
+    ///
+    /// Asserted on the record text rather than on an answer: what is under test is the context the
+    /// pipeline assembles, and the condition has to sit under the same document heading as the
+    /// drugs for the model to join them.
+    /// </summary>
+    [Fact]
+    public async Task RecordCarriesADiagnosisAlongsideThatVisitsMedications()
+    {
+        var (patientId, documentId) = SeedWarningAndMatchingMedication(
+            substance: "clarithromycin", warning: "Complete the full course.");
+
+        _db.Diagnoses.Add(new Diagnosis
+        {
+            PatientId = patientId,
+            DocumentId = documentId,
+            Text = "Malaria",
+            SourceText = "* MALARIA",
+            Confidence = 90
+        });
+
+        await _db.SaveChangesAsync();
+
+        await Service().AskAsync(patientId, "What medicines was I given for malaria?");
+
+        var record = _ai.Prompt;
+
+        Assert.Contains("Malaria", record, StringComparison.Ordinal);
+        Assert.Contains("* MALARIA", record, StringComparison.Ordinal);
+
+        // Under the document heading, and above that document's medications — adjacency is the
+        // whole point, not mere presence somewhere in the prompt.
+        var heading = record.IndexOf($"## Document id: {documentId}", StringComparison.Ordinal);
+        var diagnosis = record.IndexOf("Diagnosis recorded on this document", StringComparison.Ordinal);
+        var medication = record.IndexOf("- Medication: clarithromycin", StringComparison.Ordinal);
+
+        Assert.True(heading >= 0 && diagnosis > heading && medication > diagnosis,
+            "The diagnosis must sit under its document heading and before that visit's medications.");
+    }
+
+    /// <summary>
+    /// "Was warfarin prescribed with aspirin?" → "Yes, on August 5, 2019…" → "When?" used to reach
+    /// the model with no idea what "when" referred to. The prior turns now travel with the
+    /// question, in their own section.
+    /// </summary>
+    [Fact]
+    public async Task SendsPriorTurnsAsConversationContextSeparateFromTheRecord()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "warfarin", warning: "Monitor INR closely.");
+
+        await _db.SaveChangesAsync();
+
+        await Service().AskAsync(patientId, "When?", [
+            new ChatTurn { Question = "Was warfarin prescribed with aspirin?", Answer = "Yes, on August 5, 2019." }
+        ]);
+
+        var prompt = _ai.Prompt;
+
+        Assert.Contains("Was warfarin prescribed with aspirin?", prompt, StringComparison.Ordinal);
+        Assert.Contains("Yes, on August 5, 2019.", prompt, StringComparison.Ordinal);
+
+        // Fenced as conversation, and after the record — the model must not be able to read a
+        // sentence the user typed as something a document says.
+        var record = prompt.IndexOf("# The patient's record", StringComparison.Ordinal);
+        var conversation = prompt.IndexOf("# Earlier in this conversation", StringComparison.Ordinal);
+
+        Assert.True(record >= 0 && conversation > record,
+            "Conversation history must be its own section, after the record.");
+
+        // The grounding rule has to survive the longer prompt, restated where the history sits.
+        Assert.Contains("This is not a source.", prompt, StringComparison.Ordinal);
+        Assert.Contains("never cite a turn", prompt, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A first question must look exactly as it did before history existed — an empty section, not
+    /// an empty heading inviting the model to reason about a conversation that never happened.
+    /// </summary>
+    [Fact]
+    public async Task OmitsTheConversationSectionEntirelyOnTheFirstQuestion()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+
+        await _db.SaveChangesAsync();
+
+        await Service().AskAsync(patientId, "What am I taking?");
+
+        Assert.DoesNotContain("# Earlier in this conversation", _ai.Prompt, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The record is the large half of this prompt; history competes with it for the same budget.
+    /// The client is not trusted to bound what it sends.
+    /// </summary>
+    [Fact]
+    public async Task KeepsOnlyTheMostRecentExchanges()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+
+        await _db.SaveChangesAsync();
+
+        var history = Enumerable.Range(1, 7)
+            .Select(i => new ChatTurn { Question = $"Question number {i}", Answer = $"Answer number {i}" })
+            .ToList();
+
+        await Service().AskAsync(patientId, "And now?", history);
+
+        var prompt = _ai.Prompt;
+
+        // Four kept, oldest three dropped.
+        Assert.DoesNotContain("Question number 3", prompt, StringComparison.Ordinal);
+        Assert.Contains("Question number 4", prompt, StringComparison.Ordinal);
+        Assert.Contains("Question number 7", prompt, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A claim that exists only in an earlier answer is not a fact about this person. The stub
+    /// model reports a contradiction only from the record, so an assertion planted in the history
+    /// must not produce one — and must not become a citation.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotTreatAClaimFromAnEarlierAnswerAsPartOfTheRecord()
+    {
+        // Seeded without the helper: it pairs a medication with a warning naming the same
+        // substance, which is a contradiction on its own. This record deliberately holds none, so
+        // the only place a contradiction could come from is the history.
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Take after food.");
+
+        await _db.SaveChangesAsync();
+
+        _db.Allergies.RemoveRange(await _db.Allergies.ToListAsync());
+        await _db.SaveChangesAsync();
+
+        var answer = await Service().AskAsync(patientId, "So am I allergic to penicillin?", [
+            new ChatTurn
+            {
+                Question = "Anything I should avoid?",
+                Answer = "You are allergic to penicillin and were given amoxicillin."
+            }
+        ]);
+
+        // Neither substance is anywhere in this patient's documents.
+        Assert.False(answer.FoundInDocuments);
+        Assert.Empty(answer.Citations);
+    }
+
+    /// <summary>
+    /// The same question in two languages returned "not found, Low · 0%" and "not found, High ·
+    /// 100%". Both readings are defensible; a number that varies run to run is not. The service
+    /// decides it now, so the model cannot.
+    /// </summary>
+    [Fact]
+    public async Task ConfidenceOnANotFoundAnswerIsFixedRegardlessOfWhatTheModelSaid()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Take after food.");
+
+        await _db.SaveChangesAsync();
+
+        _db.Allergies.RemoveRange(await _db.Allergies.ToListAsync());
+        await _db.SaveChangesAsync();
+
+        // The stub reports confidence 10 alongside its not-found answer.
+        var answer = await Service().AskAsync(patientId, "What was my blood pressure in 2020?");
+
+        Assert.False(answer.FoundInDocuments);
+        Assert.Equal(100, answer.Confidence);
+
+        // 100 must not drag the consult banner on: "I could not find that" is not a risk statement.
+        Assert.False(answer.ConsultProfessional);
+    }
+
+    /// <summary>
+    /// "intha marunthu safe ah?" was refused and then badged "not found in your documents", which
+    /// tells the reader their records are incomplete when the truth is that MediTrail will not
+    /// judge safety (§5.3). The two are reported separately now.
+    /// </summary>
+    [Fact]
+    public async Task ASafetyRefusalIsNotReportedAsAMissingFact()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+
+        await _db.SaveChangesAsync();
+
+        _ai.RefuseOnSafety = true;
+
+        var answer = await Service().AskAsync(patientId, "intha marunthu safe ah?");
+
+        Assert.True(answer.SafetyRefusal);
+        Assert.False(answer.FoundInDocuments);
+
+        // A refusal about risk always carries the consult banner (FR-7.6).
+        Assert.True(answer.ConsultProfessional);
+    }
+
+    /// <summary>
+    /// Closing and reopening the drawer lost the conversation, which now also loses the follow-up
+    /// context Task 2 added. The whole answer is stored, not just its text — an answer replayed
+    /// without its citations or its consult flag is a weaker claim than the one first shown
+    /// (Principle 3).
+    /// </summary>
+    [Fact]
+    public async Task StoresACompletedTurnAndReplaysItWithItsEvidence()
+    {
+        var (patientId, documentId) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+
+        await _db.SaveChangesAsync();
+
+        await Service().AskAsync(patientId, "Anything I should not be taking?");
+
+        var stored = Assert.Single(await Service().GetHistoryAsync(patientId));
+
+        Assert.Equal("Anything I should not be taking?", stored.Question);
+        Assert.True(stored.Answer.FoundInDocuments);
+        Assert.Contains(documentId, stored.Answer.Citations);
+        Assert.True(stored.Answer.ConsultProfessional);
+    }
+
+    /// <summary>Oldest first, so a replayed drawer reads in the order it was spoken.</summary>
+    [Fact]
+    public async Task ReplaysTheConversationInOrder()
+    {
+        var (patientId, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+
+        await _db.SaveChangesAsync();
+
+        var service = Service();
+        await service.AskAsync(patientId, "First question");
+        await service.AskAsync(patientId, "Second question");
+
+        var stored = await service.GetHistoryAsync(patientId);
+
+        Assert.Equal(["First question", "Second question"], stored.Select(m => m.Question));
+    }
+
+    /// <summary>One patient's conversation never appears in another's drawer.</summary>
+    [Fact]
+    public async Task KeepsConversationsScopedToTheirPatient()
+    {
+        var (first, _) = SeedWarningAndMatchingMedication(
+            substance: "paracetamol", warning: "Avoid acetaminophen.");
+        var (second, _) = SeedWarningAndMatchingMedication(
+            substance: "ibuprofen", warning: "Avoid ibuprofen.");
+
+        await _db.SaveChangesAsync();
+
+        await Service().AskAsync(first, "Only asked about the first patient");
+
+        Assert.Empty(await Service().GetHistoryAsync(second));
+    }
+
     private (Guid PatientId, Guid DocumentId) SeedWarningAndMatchingMedication(
         string substance, string warning, bool isDocumentWarning = true)
     {
@@ -240,10 +504,33 @@ public partial class GroundedChatServiceTests : IDisposable
     {
         public string Prompt { get; private set; } = "(never called)";
 
+        /// <summary>Stands in for the model declining to judge safety, as the prompt requires.</summary>
+        public bool RefuseOnSafety { get; set; }
+
         public Task<AiCompletion> CompleteAsync(
             string systemPrompt, string userMessage, string? model = null, CancellationToken ct = default)
         {
             Prompt = systemPrompt;
+
+            if (RefuseOnSafety)
+            {
+                return Task.FromResult(new AiCompletion
+                {
+                    Content = """
+                    {
+                      "answerEn": "I cannot tell you whether a medicine is safe for you. Your records show what was prescribed; a pharmacist can judge it.",
+                      "answerTa": "…",
+                      "citations": [],
+                      "confidence": 100,
+                      "safetyRefusal": true,
+                      "consultProfessional": true,
+                      "foundInDocuments": false
+                    }
+                    """,
+                    Model = "stub",
+                    LatencyMs = 1
+                });
+            }
 
             var medications = MedicationLine().Matches(systemPrompt)
                 .Select(m => m.Groups[1].Value.Trim())

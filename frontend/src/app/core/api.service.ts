@@ -6,6 +6,8 @@ import { environment } from '../../environments/environment';
 import type {
   Alert,
   ChatAnswer,
+  ChatMessage,
+  ChatTurn,
   CreatePatientRequest,
   DocumentDetail,
   LabTrend,
@@ -114,9 +116,21 @@ export class ApiService {
       .pipe(catchError(toReadableError));
   }
 
-  ask(patientId: string, question: string): Observable<ChatAnswer> {
+  /**
+   * `history` carries the completed turns of the open drawer so a follow-up has something to
+   * resolve against. Held by the client only — nothing is stored, and the server trims it again
+   * before it reaches the prompt.
+   */
+  /** The stored conversation, so reopening the drawer resumes it rather than starting over. */
+  getChatHistory(patientId: string): Observable<ChatMessage[]> {
     return this.http
-      .post<ChatAnswer>(`${this.base}/patients/${patientId}/ask`, { question })
+      .get<ChatMessage[]>(`${this.base}/patients/${patientId}/chat`)
+      .pipe(catchError(toReadableError));
+  }
+
+  ask(patientId: string, question: string, history: ChatTurn[] = []): Observable<ChatAnswer> {
+    return this.http
+      .post<ChatAnswer>(`${this.base}/patients/${patientId}/ask`, { question, history })
       .pipe(catchError(toReadableError));
   }
 }

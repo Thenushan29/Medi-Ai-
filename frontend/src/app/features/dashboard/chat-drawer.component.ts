@@ -80,16 +80,23 @@ const SUGGESTIONS = [
               } @else if (turn.answer; as answer) {
                 <div class="rounded-2xl rounded-bl-sm bg-slate-50 px-4 py-3">
                   <p class="text-sm leading-relaxed text-slate-800">
-                    {{ language.pick(answer.answerEn, answer.answerTa) }}
+                    {{ display(answer) }}
                   </p>
 
                   <div class="mt-3 flex flex-wrap items-center gap-2">
-                    <mt-confidence [score]="answer.confidence" />
-
-                    @if (!answer.foundInDocuments) {
-                      <span class="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500">
-                        not found in your documents
+                    <!-- The confidence badge says how far to trust what the answer asserts. An
+                         answer that asserts nothing has no such number, and showing one invited
+                         the question of what "not found · 100%" was supposed to mean. -->
+                    @if (answer.safetyRefusal) {
+                      <span class="rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-800">
+                        MediTrail cannot judge whether a medicine is safe for you
                       </span>
+                    } @else if (!answer.foundInDocuments) {
+                      <span class="rounded border border-slate-200 px-2 py-0.5 text-xs text-slate-500">
+                        nothing in your documents covers this
+                      </span>
+                    } @else {
+                      <mt-confidence [score]="answer.confidence" />
                     }
                   </div>
 
@@ -170,6 +177,48 @@ export class ChatDrawerComponent {
   protected readonly turns = signal<Turn[]>([]);
   protected readonly busy = signal(false);
 
+  constructor() {
+    // The drawer is created fresh each time it opens, so this restores the conversation rather
+    // than showing a blank panel. A failure here leaves an empty drawer, which is exactly the
+    // behaviour before it was stored — never an error banner over a working chat.
+    queueMicrotask(() =>
+      this.api.getChatHistory(this.patientId()).subscribe({
+        next: stored =>
+          this.turns.update(list => [
+            ...stored.map(message => ({
+              question: message.question,
+              answer: message.answer,
+              pending: false
+            })),
+            ...list
+          ]),
+        error: () => undefined
+      })
+    );
+  }
+
+  /**
+   * Which version of the answer to show.
+   *
+   * Someone who types in Tamil script gets Tamil script back, and someone who types Tanglish gets
+   * Tanglish — replying in English to either is a worse answer even when it is a correct one. The
+   * EN/TA toggle still wins when the reader has set it to Tamil, so the global control is not
+   * quietly overridden; an English question is untouched by any of this, which matters because the
+   * demo is in English.
+   */
+  protected display(answer: ChatAnswer): string {
+    if (this.language.current() === 'ta') return answer.answerTa || answer.answerEn;
+
+    switch (answer.askedLanguage) {
+      case 'Tanglish':
+        return answer.answerTanglish || answer.answerEn;
+      case 'Tamil':
+        return answer.answerTa || answer.answerEn;
+      default:
+        return answer.answerEn;
+    }
+  }
+
   protected nameFor(documentId: string): string {
     return this.documents().find(d => d.documentId === documentId)?.fileName ?? 'source document';
   }
@@ -180,9 +229,17 @@ export class ChatDrawerComponent {
 
     this.draft = '';
     this.busy.set(true);
+
+    // Snapshot the completed exchanges before the pending turn is appended, so the question is
+    // never sent as part of its own history. Answered turns only — a failed or in-flight turn has
+    // nothing a follow-up could resolve against.
+    const history = this.turns()
+      .filter(turn => turn.answer)
+      .map(turn => ({ question: turn.question, answer: turn.answer!.answerEn }));
+
     this.turns.update(list => [...list, { question: text, pending: true }]);
 
-    this.api.ask(this.patientId(), text).subscribe({
+    this.api.ask(this.patientId(), text, history).subscribe({
       next: answer => {
         this.turns.update(list =>
           list.map((turn, i) => (i === list.length - 1 ? { ...turn, answer, pending: false } : turn))

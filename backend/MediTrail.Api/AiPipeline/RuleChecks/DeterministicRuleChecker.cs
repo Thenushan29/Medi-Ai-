@@ -50,8 +50,15 @@ public sealed class DeterministicRuleChecker(
             .Where(d => d.PatientId == patientId)
             .ToDictionaryAsync(d => d.Id, d => d.Sha256, ct);
 
+        // Read separately, because every check above filters them out — which is the problem.
+        var unresolved = await db.Medications
+            .AsNoTracking()
+            .Where(m => m.PatientId == patientId && m.GenericName == null)
+            .ToListAsync(ct);
+
         var alerts = new List<Alert>();
 
+        alerts.AddRange(FindUnresolvedMedications(patientId, unresolved));
         alerts.AddRange(FindDuplicates(patientId, medications, hashByDocument));
         alerts.AddRange(FindDosageConflicts(patientId, medications, hashByDocument));
         alerts.AddRange(FindDuplicateTherapeuticClass(patientId, medications));
@@ -65,12 +72,83 @@ public sealed class DeterministicRuleChecker(
     }
 
     /// <summary>
+    /// Medications that were read off the page but never got an active ingredient.
+    ///
+    /// Every other check in this class keys on <c>GenericName</c> and filters null out, so an
+    /// unresolved row takes part in nothing: no interaction, no duplicate, no allergy or warning
+    /// match. Until now that happened in complete silence. On the evaluation set it cost a real
+    /// finding — "Oxprelol", a misspelling of oxprenolol, left the beta-blocker alert naming two
+    /// drugs instead of three (traps.md Y3), on a document that read at confidence 90, so the
+    /// low-confidence alert never fired either.
+    ///
+    /// Teaching the brand table one more name fixes that one document. It does nothing for the
+    /// next misspelling a judge brings, and honesty about the gap is the part that generalises
+    /// (Principle 1): a check that could not run is reported, not omitted.
+    ///
+    /// Placeholders are excluded. "DEMO MEDICINE 1" has no generic because it is not a drug
+    /// (traps.md X6) — a different fact from "this might be a drug and we could not identify it",
+    /// and folding the two together would put a 14-item alert on four sample documents and bury
+    /// the one row that matters.
+    /// </summary>
+    private static IEnumerable<Alert> FindUnresolvedMedications(
+        Guid patientId, List<Medication> unresolved)
+    {
+        var real = unresolved
+            .Where(m => !DrugNameNormalizer.IsPlaceholder(m.BrandName))
+            .ToList();
+
+        if (real.Count == 0) yield break;
+
+        var names = real
+            .Select(m => m.BrandName ?? m.SourceText ?? "an unnamed entry")
+            .Select(OneLine)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        yield return new Alert
+        {
+            PatientId = patientId,
+            Type = AlertType.UnresolvedMedication,
+            // Informational: nothing is known to be wrong. What is being reported is that a check
+            // could not be performed, which the user can act on by asking someone who can read it.
+            Severity = AlertSeverity.Info,
+            Title = names.Count == 1
+                ? $"{names[0]} could not be identified"
+                : $"{names.Count} medications could not be identified",
+            InvolvedGenerics = [],
+            ExplanationEn =
+                $"{string.Join(", ", names)} {(names.Count == 1 ? "was" : "were")} read from your " +
+                "documents, but the active ingredient could not be identified with confidence. " +
+                $"{(names.Count == 1 ? "It was" : "They were")} therefore left out of the " +
+                "interaction, duplicate and allergy checks above — those findings cannot cover " +
+                $"{(names.Count == 1 ? "it" : "them")}.",
+            ExplanationTa = RuleFindingTamil.UnresolvedMedication(names),
+            SuggestedActionEn =
+                "Show these to your pharmacist and ask what they are, so they can be checked against the rest.",
+            // The reading itself may have been perfectly clear — what failed is the name lookup,
+            // so the extraction's own confidence is the honest number to carry.
+            Confidence = CombinedConfidence([.. real.Select(m => m.Confidence)]),
+            RequiresProfessionalConsult = false,
+            VerificationStatus = VerificationStatus.NotApplicable,
+            EvidenceDocumentIds = real.Select(m => m.DocumentId).Distinct().ToList(),
+            DetectedBy = "rules"
+        };
+    }
+
+    /// <summary>
     /// The same generic prescribed in overlapping periods (FR-5.1).
     ///
     /// Two rows from the *same document* are not a duplicate — a prescription listing a drug twice
     /// is one prescribing decision. Nor are two rows from byte-identical uploads: the dataset
     /// contains the same file twice (traps.md Y2), and reporting that as double-dosing would be a
     /// false alarm about a filing artefact.
+    ///
+    /// Grouped on the whole generic, deliberately, where the interaction and warning checks match
+    /// component-wise. Aspirin and aspirin/codeine are not the same prescription written twice, and
+    /// this alert's wording — "appears on two different documents", "taking both would mean a
+    /// double dose" — would be wrong about them. The overlap that does matter between two products
+    /// sharing an ingredient is caught by the therapeutic-class check below, which now reads a
+    /// combination product's class from its ingredients and words the finding correctly.
     /// </summary>
     private static IEnumerable<Alert> FindDuplicates(
         Guid patientId, List<Medication> medications, Dictionary<Guid, string> hashByDocument)
@@ -290,8 +368,12 @@ public sealed class DeterministicRuleChecker(
         {
             foreach (var substance in entry.RelatesTo)
             {
+                // SharesComponent, not AreSameDrug: a warning against acetaminophen has to catch
+                // ibuprofen/paracetamol, and an allergy to aspirin has to catch aspirin/codeine.
+                // Whole-string equality misses every combination product, and this is the check
+                // the headline trap turns on — the same shape as traps.md X1, on the safety side.
                 var matches = medications
-                    .Where(m => DrugNameNormalizer.AreSameDrug(m.GenericName, substance)
+                    .Where(m => DrugNameNormalizer.SharesComponent(m.GenericName, substance)
                              || IsClassMatch(m.GenericName, substance))
                     .ToList();
 
@@ -361,7 +443,7 @@ public sealed class DeterministicRuleChecker(
     }
 
     private static bool IsSameMedicineUnderAnotherName(string drugName, string substance) =>
-        DrugNameNormalizer.AreSameDrug(drugName, substance)
+        DrugNameNormalizer.SharesComponent(drugName, substance)
         && !string.Equals(drugName, substance, StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<Alert> FindOutOfRangeLabs(Guid patientId, List<LabResult> labs)
@@ -438,6 +520,13 @@ public sealed class DeterministicRuleChecker(
 
         return a.StartDate <= bEnd && b.StartDate <= aEnd;
     }
+
+    /// <summary>
+    /// One entry, one line. Source text is transcribed from a page and carries its line breaks;
+    /// left in, a title or list item breaks across lines mid-name.
+    /// </summary>
+    private static string OneLine(string value) =>
+        string.Join(' ', value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     private static string Display(string generic) =>
         generic.Length == 0 ? generic : char.ToUpperInvariant(generic[0]) + generic[1..];

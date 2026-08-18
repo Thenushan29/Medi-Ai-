@@ -97,7 +97,10 @@ public sealed class DocumentService(
                 if (cached is not null)
                 {
                     ApplyCachedExtraction(document, cached);
-                    logger.LogInformation("Reused cached extraction for {FileName} (hash {Hash})", file.FileName, hash[..12]);
+                    // Keyed by document id, not the uploaded file name — a name the user chose for
+                    // a relative's medical record identifies the patient as readily as the content.
+                    logger.LogInformation("Reused cached extraction for {DocumentId} (hash {Hash})",
+                        document.Id, hash[..12]);
                 }
                 else
                 {
@@ -121,7 +124,8 @@ public sealed class DocumentService(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Upload failed for {FileName}", file.FileName);
+                logger.LogError(ex, "Upload failed for patient {PatientId} ({ContentType}, {Bytes} bytes)",
+                    patientId, file.ContentType, file.Length);
                 rejected.Add(new RejectedFileDto
                 {
                     FileName = file.FileName,
@@ -211,6 +215,10 @@ public sealed class DocumentService(
                 d.FailureReason,
                 d.OverallConfidence,
                 d.LegibilityNotes,
+                Diagnoses = d.Diagnoses
+                    .Where(x => x.Text != null)
+                    .Select(x => x.Text!)
+                    .ToList(),
                 MedicationCount = d.Medications.Count,
                 LabResultCount = d.LabResults.Count,
                 OutOfRangeCount = d.LabResults.Count(l => l.IsOutOfRange),
@@ -232,6 +240,7 @@ public sealed class DocumentService(
             FailureReason = r.FailureReason,
             OverallConfidence = r.OverallConfidence,
             LegibilityNotes = r.LegibilityNotes,
+            Diagnoses = r.Diagnoses,
             MedicationCount = r.MedicationCount,
             LabResultCount = r.LabResultCount,
             OutOfRangeCount = r.OutOfRangeCount,

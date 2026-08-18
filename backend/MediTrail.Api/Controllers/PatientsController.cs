@@ -144,7 +144,17 @@ public sealed class PatientsController(
     public async Task<ActionResult<ChatAnswerDto>> Ask(Guid id, AskRequest request, CancellationToken ct)
     {
         if (await patients.GetAsync(id, ct) is null) return NotFound(NotFoundError(id));
-        return Ok(await chat.AskAsync(id, request.Question, ct));
+        return Ok(await chat.AskAsync(id, request.Question, request.History, ct));
+    }
+
+    /// <summary>The stored conversation, so reopening the drawer resumes it rather than starting over.</summary>
+    [HttpGet("{id:guid}/chat")]
+    [ProducesResponseType<IReadOnlyList<ChatMessageDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ApiError>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<ChatMessageDto>>> ChatHistory(Guid id, CancellationToken ct)
+    {
+        if (await patients.GetAsync(id, ct) is null) return NotFound(NotFoundError(id));
+        return Ok(await chat.GetHistoryAsync(id, ct));
     }
 
     private ApiError NotFoundError(Guid id) => new()

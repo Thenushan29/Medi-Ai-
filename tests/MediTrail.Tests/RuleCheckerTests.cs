@@ -143,6 +143,146 @@ public class RuleCheckerTests : IDisposable
     }
 
     /// <summary>
+    /// traps.md Y3, in the shape the pipeline actually produced it rather than the shape the test
+    /// above assumes.
+    ///
+    /// The run recorded in traps.md merged `Oxprelol 50mg` with `genericName: null`, because the
+    /// model correctly declined to resolve an ambiguous misspelling (Y12) and the brand table did
+    /// not know it either. A null generic is excluded from every cross-check, so the class alert
+    /// named two beta-blockers instead of three — a finding lost to a spelling, with no signal.
+    ///
+    /// The third generic here comes from the brand fallback, which is the only route available
+    /// when the model returns null: if the table forgets `oxprelol`, this fails.
+    /// </summary>
+    [Fact]
+    public async Task ThirdBetaBlockerReachesTheClassCheckThroughTheBrandFallback()
+    {
+        var oxprenolol = DrugNameNormalizer.GenericForBrand("Oxprelol 50mg");
+        Assert.Equal("oxprenolol", oxprenolol);
+
+        var dated = Guid.NewGuid();
+        var undated = Guid.NewGuid();
+        AddDocument(dated, new DateOnly(2007, 7, 7));
+        AddDocument(undated, null);
+
+        AddMedication(dated, generic: "atenolol", strength: 50, perDay: 1);
+        AddMedication(undated, generic: "metoprolol", brand: "Betaloc", strength: 100, perDay: 2);
+        AddMedication(undated, generic: oxprenolol!, brand: "Oxprelol", strength: 50, perDay: 1);
+
+        await _db.SaveChangesAsync();
+
+        var alert = Assert.Single(await _checker.CheckAsync(_patientId),
+            x => x.Type == AlertType.DuplicatePrescription);
+
+        Assert.Equal(AlertSeverity.Red, alert.Severity);
+        Assert.Contains("beta blocker", alert.Title, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(
+            new[] { "atenolol", "metoprolol", "oxprenolol" },
+            alert.InvolvedGenerics.Order().ToArray());
+    }
+
+    /// <summary>
+    /// The same-document contradiction, with the medication written as a combination product.
+    ///
+    /// This is traps.md X1's shape on the safety side: whole-string equality cannot see the
+    /// paracetamol inside `ibuprofen/paracetamol`, so a page prescribing it under a printed
+    /// warning against acetaminophen produced nothing at all. The dataset happens to print plain
+    /// Paracetamol; a judge's dataset printing Combiflam would have gone unreported.
+    /// </summary>
+    [Fact]
+    public async Task MatchesAPrintedWarningAgainstAnIngredientOfACombinationProduct()
+    {
+        var documentId = Guid.NewGuid();
+        AddDocument(documentId, new DateOnly(2025, 11, 1));
+
+        AddMedication(documentId, generic: "ibuprofen/paracetamol", brand: "Combiflam", strength: 400);
+        AddWarning(documentId,
+            "Avoid taking unnecessary or liver-toxic medications (e.g. alcohol, acetaminophen).",
+            ["paracetamol"]);
+
+        await _db.SaveChangesAsync();
+
+        var alert = Assert.Single(await _checker.CheckAsync(_patientId),
+            a => a.Type == AlertType.DocumentWarningConflict);
+
+        Assert.Equal(AlertSeverity.Red, alert.Severity);
+        Assert.True(alert.RequiresProfessionalConsult);
+        Assert.Contains("same document", alert.Title);
+        Assert.Equal(["ibuprofen/paracetamol"], alert.InvolvedGenerics);
+    }
+
+    /// <summary>
+    /// A combination product takes its class from its ingredients, so two products that both
+    /// contain an NSAID are duplicate therapy even though neither generic string is in the table.
+    /// </summary>
+    [Fact]
+    public async Task ClustersACombinationProductIntoItsIngredientsTherapeuticClass()
+    {
+        var documentId = Guid.NewGuid();
+        AddDocument(documentId, new DateOnly(2019, 8, 5));
+
+        AddMedication(documentId, generic: "aspirin/codeine", strength: 325);
+        AddMedication(documentId, generic: "ibuprofen", strength: 400);
+
+        await _db.SaveChangesAsync();
+
+        var alert = Assert.Single(await _checker.CheckAsync(_patientId),
+            a => a.Type == AlertType.DuplicatePrescription);
+
+        Assert.Contains("nsaid", alert.Title, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(["aspirin/codeine", "ibuprofen"], alert.InvolvedGenerics.Order());
+    }
+
+    /// <summary>
+    /// The gap Task 6 exists to close: an unresolved generic takes part in no check, and used to
+    /// do so in silence. Confidence 90 on the document means the low-confidence alert cannot cover
+    /// it — this is a naming failure, not a legibility one.
+    /// </summary>
+    [Fact]
+    public async Task ReportsAMedicationWhoseActiveIngredientCouldNotBeIdentified()
+    {
+        var documentId = Guid.NewGuid();
+        AddDocument(documentId, new DateOnly(2012, 11, 9));
+
+        AddMedication(documentId, generic: null!, brand: "SM FIBRO");
+
+        await _db.SaveChangesAsync();
+
+        var alert = Assert.Single(await _checker.CheckAsync(_patientId),
+            a => a.Type == AlertType.UnresolvedMedication);
+
+        Assert.Equal(AlertSeverity.Info, alert.Severity);
+        Assert.Contains("SM FIBRO", alert.Title);
+        Assert.Contains("left out of the", alert.ExplanationEn!);
+        Assert.Equal([documentId], alert.EvidenceDocumentIds);
+
+        // Bilingual by construction, not a copy of the English (Principle 6).
+        Assert.NotNull(alert.ExplanationTa);
+        Assert.NotEqual(alert.ExplanationEn, alert.ExplanationTa);
+    }
+
+    /// <summary>
+    /// A placeholder has no generic because it is not a drug (traps.md X6), which is a different
+    /// fact from "we could not identify this". Reporting the four sample documents' fourteen
+    /// placeholder rows as unidentified medicines would bury the one row that matters.
+    /// </summary>
+    [Fact]
+    public async Task DoesNotReportPlaceholderRowsAsUnidentifiedMedications()
+    {
+        var documentId = Guid.NewGuid();
+        AddDocument(documentId, new DateOnly(2020, 4, 27));
+
+        AddMedication(documentId, generic: null!, brand: "DEMO MEDICINE 1");
+        AddMedication(documentId, generic: null!, brand: "DEMO MEDICINE 2");
+
+        await _db.SaveChangesAsync();
+
+        Assert.DoesNotContain(await _checker.CheckAsync(_patientId),
+            a => a.Type == AlertType.UnresolvedMedication);
+    }
+
+    /// <summary>
     /// Two beta-blockers on one page (traps.md Y4) need no date reasoning at all — one prescription
     /// is one prescribing decision.
     /// </summary>

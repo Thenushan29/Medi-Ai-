@@ -112,6 +112,46 @@ public sealed record AskRequest
     [Required(AllowEmptyStrings = false)]
     [StringLength(1000, MinimumLength = 2)]
     public string Question { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Earlier turns in the open chat session, oldest first, so a follow-up like "when?" has
+    /// something to resolve against (FR-7.2). Client-held — nothing is persisted, and a reopened
+    /// drawer starts empty.
+    ///
+    /// Trimmed server-side regardless of what arrives: the client is not trusted to bound the
+    /// prompt.
+    /// </summary>
+    public IReadOnlyList<ChatTurn> History { get; init; } = [];
+}
+
+/// <summary>
+/// Which language a question was written in. Tanglish — Tamil in Latin script — is how people
+/// actually type Tamil on a phone keyboard, and the model handled it unaided, so it is recognised
+/// as its own answer language rather than folded into either neighbour.
+/// </summary>
+public enum AskedLanguage
+{
+    English,
+    Tamil,
+    Tanglish
+}
+
+/// <summary>A stored exchange, replayed into the drawer when it reopens.</summary>
+public sealed record ChatMessageDto
+{
+    public required string Question { get; init; }
+    public required ChatAnswerDto Answer { get; init; }
+    public required DateTimeOffset AskedAt { get; init; }
+}
+
+/// <summary>One completed exchange. Context for the next question, never a source for it.</summary>
+public sealed record ChatTurn
+{
+    [StringLength(1000)]
+    public string Question { get; init; } = string.Empty;
+
+    [StringLength(4000)]
+    public string Answer { get; init; } = string.Empty;
 }
 
 /// <summary>Chat answer with citations, confidence and the consult flag (FR-7.3, 7.4, 7.6).</summary>
@@ -119,8 +159,43 @@ public sealed record ChatAnswerDto
 {
     public required string AnswerEn { get; init; }
     public string? AnswerTa { get; init; }
+
+    /// <summary>
+    /// The answer in Tamil written in Latin script, when that is how the question was written
+    /// ("intha marunthu safe ah?"). Null otherwise.
+    ///
+    /// Its own field because Tanglish is neither of the other two: answering formal Tamil script
+    /// to someone who wrote in Latin script is as wrong as answering English.
+    /// </summary>
+    public string? AnswerTanglish { get; init; }
+
+    /// <summary>
+    /// The language the question was written in, so the interface can show that version first.
+    /// Both other versions are still generated and the EN/TA toggle still reaches them — this
+    /// decides the default only.
+    /// </summary>
+    public required AskedLanguage AskedLanguage { get; init; }
+
     public required IReadOnlyList<Guid> Citations { get; init; }
+
+    /// <summary>
+    /// How well the record supports the answer, 0–100.
+    ///
+    /// When <see cref="FoundInDocuments"/> is false this is fixed at 100 by the service and means
+    /// something different: certainty that the record does not contain it, having read all of it.
+    /// The interface does not show a trust percentage on those answers — see
+    /// <see cref="SafetyRefusal"/> for why a number there was misleading either way.
+    /// </summary>
     public required int Confidence { get; init; }
+
+    /// <summary>
+    /// True when the answer declined to judge whether something is safe, rather than failing to
+    /// find it. "Is this medicine safe?" is a question MediTrail must never answer (§5.3) — that
+    /// is a refusal on principle, not an absent fact, and badging it "not found in your documents"
+    /// told the user their records were incomplete when they were not.
+    /// </summary>
+    public required bool SafetyRefusal { get; init; }
+
     public required bool ConsultProfessional { get; init; }
     public required bool FoundInDocuments { get; init; }
 }

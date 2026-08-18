@@ -98,9 +98,14 @@ public sealed class AnalysisService(
                 var first = group.First();
                 var generic = first.GenericName;
 
+                // Component-wise, so a finding naming aspirin still highlights the aspirin/codeine
+                // row it was raised from. An exact Contains leaves the row that caused the alert
+                // looking unremarkable on the table the user reads first.
                 var related = generic is null
                     ? []
-                    : alerts.Where(a => a.InvolvedGenerics.Contains(generic)).ToList();
+                    : alerts.Where(a => a.InvolvedGenerics
+                        .Any(involved => DrugNameNormalizer.SharesComponent(involved, generic)))
+                        .ToList();
 
                 return new MedicationGroupDto
                 {

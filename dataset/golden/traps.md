@@ -2,8 +2,8 @@
 
 Every item here must be detected (§18.2). This list doubles as the demonstration script.
 
-Derived by reading all 16 documents directly. **Not yet confirmed against the pipeline** — each row
-gets a ✅ only once the system actually raises it.
+Derived by reading all 16 documents directly. The Detection status table at the bottom records what
+the pipeline actually did with them, not what the unit tests do with constructed inputs.
 
 ---
 
@@ -60,11 +60,53 @@ Consequences:
 
 ## Detection status
 
+Last confirmed on **2026-08-16** by `dotnet run --project tools/MediTrail.GoldenRunner -- --traps`,
+over all 16 images, with `google/gemini-2.5-flash` on OpenRouter — the model the demo runs on.
+The first run that day found Y3 and X1 failing; both fixes landed on this branch and the re-run
+below confirms them from the image, not from a unit test.
+
+The harness runs the production path end to end: upload → SHA-256 cache → `VisionDocumentExtractor`
+→ `ProcessingWorker` → `ExtractionMerger` → `DeterministicRuleChecker` → `InteractionCrossChecker` →
+openFDA → persisted alerts, then asserts against the alerts that were written. Only the database
+(in-memory) and object storage (a scratch directory) are substituted, so a verification run leaves
+no patient data in the demo project; nothing that reads a document or decides a finding is stubbed.
+A ✅ below therefore means the system raised the finding from the image, not that a unit test passed
+on a hand-built input.
+
 | Trap | Detected | Notes |
 |---|---|---|
-| Y1 same-document contradiction | ⬜ | The one that must work |
-| Y2 duplicate file cached | ⬜ | |
-| Y3 three beta-blockers | ⬜ | |
-| X1 warfarin + aspirin | ⬜ | |
-| Y10 / Y11 null dates | ⬜ | Hallucination check |
-| X6 placeholders not invented | ⬜ | Hallucination check |
+| Y1 same-document contradiction | ✅ | Red `DocumentWarningConflict`, confidence 90, consult set, evidence `patient_y_year2_1`. Raised through the **`warningsInDocument` path**, which is the only path available: the extraction produced zero recorded-allergy rows across the whole set. The warning merged as `relatesTo: [paracetamol]` — `acetaminophen` was normalized on the way in, which is what makes it collide with the prescribed Paracetamol |
+| Y2 duplicate file cached | ✅ | Verified through the real cache, not by inspection: both files hash to `2ed598c9c904…`, `year3_2` extracted, `year3_3` came back `Cached` with no second model call. No same-generic duplicate or dosage alert over any of the four shared generics |
+| Y3 three beta-blockers | ✅ | "3 beta blockers in your records" — Red, confidence 90, consult set, naming atenolol, metoprolol **and oxprenolol**, evidence `y_year3_2` + `y_year3_6`. First run failed with two of three: `Oxprelol 50mg` merged with a null generic. Fixed by teaching the brand table `oxprelol` → oxprenolol — a dataset-specific entry; the general gap (an unresolved generic silently exits every check) is covered by the `UnresolvedMedication` alert, which fires for `SM FIBRO` on this same set |
+| X1 warfarin + aspirin | ✅ | "Warfarin and Aspirin/codeine may interact" — Red, confidence 100, consult set, **openFDA Confirmed** (the label's own `drug_interactions` text), evidence `patient_x_year3_2`. First run failed: the record holds the combination `aspirin/codeine` and the grounding lookup required an exact key. Grounding is now component-wise; ungrounded findings are still dropped |
+| Y10 / Y11 null dates | ✅ | Both `documentDate: null`, and the model returned null *before* normalization in both cases — the null is a refusal to guess, not a parse failure downstream of a guess |
+| X6 placeholders not invented | ✅ | 14 placeholder rows across the four sample documents, every one with `genericName: null`. None entered a cross-check, and none appears in any alert. Placeholders are also excluded from the `UnresolvedMedication` alert — not a drug is a different fact from not identified |
+| DATES all-document null-date sweep | ❌ | Y10/Y11 name two documents, so the harness checks **every** document whose golden label says the date is unreadable — five in this dataset. Four extract null; **`patient_y_year1_1` does not.** Two prompt fixes were attempted and both were reverted — see below |
+
+### The one open failure: `patient_y_year1_1`
+
+The page prints **`07/10/2022`** and it is legible. Rule 3 of the extraction prompt already names
+this exact string as a case that must be `null`: four-digit year, both other parts ≤ 12, no way to
+know the order. The model reads it correctly and then resolves it anyway, from the fact that the
+form is a UK NHS script — day-first. Across runs it returns `2022-07-10` or `2022-10-07`, flipping
+between the two readings, which is the signature of exactly that guess.
+
+So this is **not** a legibility failure and not a missing rule. It is the model overriding a rule
+that names its input, under a strong contextual prior.
+
+Two prompt changes were measured against the §18.1 accuracy gate and **both were reverted** under
+the §18.4 rule that a prompt change may not cost accuracy:
+
+| Prompt | Overall | Hallucinated | `y_year1_1` |
+|---|---|---|---|
+| Committed (baseline) | **95.1%** (330/347) | 1 | `2022-07-10` |
+| + legibility precondition, + "a bare number is not a frequency" | 92.2% (321/348) | 1 | `2022-07-10` |
+| + rule 3 reinforced against national date conventions | 92.8% (324/349) | 5 | `2022-10-07` |
+
+Neither attempt fixed the date, and both made the reader worse — the frequency rule alone took
+frequency misses from 3 to 11. A fixed date is not worth a worse reader.
+
+Also worth recording: the `document` category scored 78.1%, 68.8% and 65.6% across the three runs
+on **three prompts that did not touch document metadata**. Temperature is 0, but the provider is not
+reproducible run to run, so a single gate run is a noisy measurement and small differences between
+runs should not be read as signal.

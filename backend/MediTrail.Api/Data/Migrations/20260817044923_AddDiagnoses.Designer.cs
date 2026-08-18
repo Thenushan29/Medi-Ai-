@@ -5,6 +5,7 @@ using System.Text.Json;
 using MediTrail.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MediTrail.Api.Data.Migrations
 {
     [DbContext(typeof(MediTrailDbContext))]
-    partial class MediTrailDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260817044923_AddDiagnoses")]
+    partial class AddDiagnoses
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -182,76 +185,6 @@ namespace MediTrail.Api.Data.Migrations
                         .HasDatabaseName("ix_allergies_patient_id_is_document_warning");
 
                     b.ToTable("allergies", (string)null);
-                });
-
-            modelBuilder.Entity("MediTrail.Api.Data.Entities.ChatMessage", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AnswerEn")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("answer_en");
-
-                    b.Property<string>("AnswerTa")
-                        .HasColumnType("text")
-                        .HasColumnName("answer_ta");
-
-                    b.Property<string>("AnswerTanglish")
-                        .HasColumnType("text")
-                        .HasColumnName("answer_tanglish");
-
-                    b.Property<string>("AskedLanguage")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("asked_language");
-
-                    b.PrimitiveCollection<List<Guid>>("Citations")
-                        .IsRequired()
-                        .HasColumnType("uuid[]")
-                        .HasColumnName("citations");
-
-                    b.Property<int>("Confidence")
-                        .HasColumnType("integer")
-                        .HasColumnName("confidence");
-
-                    b.Property<bool>("ConsultProfessional")
-                        .HasColumnType("boolean")
-                        .HasColumnName("consult_professional");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<bool>("FoundInDocuments")
-                        .HasColumnType("boolean")
-                        .HasColumnName("found_in_documents");
-
-                    b.Property<Guid>("PatientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("patient_id");
-
-                    b.Property<string>("Question")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("question");
-
-                    b.Property<bool>("SafetyRefusal")
-                        .HasColumnType("boolean")
-                        .HasColumnName("safety_refusal");
-
-                    b.HasKey("Id")
-                        .HasName("pk_chat_messages");
-
-                    b.HasIndex("PatientId", "CreatedAt")
-                        .HasDatabaseName("ix_chat_messages_patient_id_created_at");
-
-                    b.ToTable("chat_messages", (string)null);
                 });
 
             modelBuilder.Entity("MediTrail.Api.Data.Entities.Diagnosis", b =>
@@ -665,18 +598,6 @@ namespace MediTrail.Api.Data.Migrations
                     b.Navigation("Document");
                 });
 
-            modelBuilder.Entity("MediTrail.Api.Data.Entities.ChatMessage", b =>
-                {
-                    b.HasOne("MediTrail.Api.Data.Entities.Patient", "Patient")
-                        .WithMany("ChatMessages")
-                        .HasForeignKey("PatientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_chat_messages_patients_patient_id");
-
-                    b.Navigation("Patient");
-                });
-
             modelBuilder.Entity("MediTrail.Api.Data.Entities.Diagnosis", b =>
                 {
                     b.HasOne("MediTrail.Api.Data.Entities.Document", "Document")
@@ -739,8 +660,6 @@ namespace MediTrail.Api.Data.Migrations
             modelBuilder.Entity("MediTrail.Api.Data.Entities.Patient", b =>
                 {
                     b.Navigation("Alerts");
-
-                    b.Navigation("ChatMessages");
 
                     b.Navigation("Documents");
                 });

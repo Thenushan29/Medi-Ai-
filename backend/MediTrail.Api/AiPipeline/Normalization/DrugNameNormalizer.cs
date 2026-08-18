@@ -69,6 +69,11 @@ public static partial class DrugNameNormalizer
         ["betaloc"] = "metoprolol",
         ["lopressor"] = "metoprolol",
         ["trasicor"] = "oxprenolol",
+        // Printed as "Oxprelol" on patient_y_year3_6 (traps.md Y12). The model is right to decline
+        // an ambiguous misspelling, but the null generic then hides a third beta-blocker from the
+        // class check (traps.md Y3). Resolved here, where a closed table can be reviewed, rather
+        // than by asking the prompt to guess — the same reason "crocine" sits beside "crocin".
+        ["oxprelol"] = "oxprenolol",
         ["tenormin"] = "atenolol",
         ["inderal"] = "propranolol",
         ["concor"] = "bisoprolol",
@@ -205,11 +210,31 @@ public static partial class DrugNameNormalizer
         return Brands.TryGetValue(cleaned, out var generic) ? generic : null;
     }
 
-    /// <summary>Therapeutic class, or null when the drug is not in the table.</summary>
+    /// <summary>
+    /// Therapeutic class, or null when the drug is not in the table.
+    ///
+    /// A combination product takes the class of whichever ingredient has one, so
+    /// <c>ibuprofen/paracetamol</c> is an NSAID and <c>aspirin/codeine</c> is one too. Without
+    /// this the whole string misses the table and the product joins no class cluster — which is
+    /// how two products that both contain aspirin avoid the duplicate-therapy check entirely.
+    /// </summary>
     public static string? ClassOf(string? genericName)
     {
         var normalized = Normalize(genericName);
-        return normalized is not null && TherapeuticClasses.TryGetValue(normalized, out var cls) ? cls : null;
+
+        if (normalized is not null && TherapeuticClasses.TryGetValue(normalized, out var exact))
+        {
+            return exact;
+        }
+
+        // First listed ingredient with a known class wins. Combination products name their
+        // principal ingredient first, and a product cannot be filed under two classes at once.
+        foreach (var component in Components(genericName))
+        {
+            if (TherapeuticClasses.TryGetValue(component, out var cls)) return cls;
+        }
+
+        return null;
     }
 
     /// <summary>True when two names denote the same molecule.</summary>
@@ -218,6 +243,46 @@ public static partial class DrugNameNormalizer
         var left = Normalize(a);
         var right = Normalize(b);
         return left is not null && right is not null && left == right;
+    }
+
+    /// <summary>
+    /// The active ingredients in a generic name.
+    ///
+    /// A combination product is stored as one slash-separated generic — <c>aspirin/codeine</c>,
+    /// <c>ibuprofen/paracetamol</c>, <c>amoxicillin/clavulanic acid</c>. Every check that looks a
+    /// drug up by whole-string equality is therefore blind to the ingredients inside one, which is
+    /// how a proposed warfarin + aspirin finding was dropped as ungrounded (traps.md X1).
+    ///
+    /// Each part goes through <see cref="Normalize"/>, so a combination written with a synonym
+    /// still resolves: <c>acetaminophen/codeine</c> yields paracetamol.
+    /// </summary>
+    public static IReadOnlyList<string> Components(string? generic)
+    {
+        if (string.IsNullOrWhiteSpace(generic)) return [];
+
+        return
+        [
+            .. generic
+                .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(Normalize)
+                .Where(part => part is not null)
+                .Select(part => part!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+        ];
+    }
+
+    /// <summary>
+    /// True when two generic names share an active ingredient, whether or not either side is a
+    /// combination product. <see cref="AreSameDrug"/> is the stricter test — the same whole name —
+    /// and stays the right one for duplicate detection, where two different products that happen
+    /// to share an ingredient are not the same prescription.
+    /// </summary>
+    public static bool SharesComponent(string? a, string? b)
+    {
+        var left = Components(a);
+        if (left.Count == 0) return false;
+
+        return Components(b).Any(part => left.Contains(part, StringComparer.OrdinalIgnoreCase));
     }
 
     [GeneratedRegex(@"^(demo|sample|test|dummy|xyz|abc)\b.*|^medicine\s*\d+$|^drug\s*\d+$",

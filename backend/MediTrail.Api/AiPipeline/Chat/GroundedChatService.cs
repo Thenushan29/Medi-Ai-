@@ -19,7 +19,14 @@ namespace MediTrail.Api.AiPipeline.Chat;
 /// </summary>
 public interface IGroundedChatService
 {
-    Task<ChatAnswerDto> AskAsync(Guid patientId, string question, CancellationToken ct = default);
+    Task<ChatAnswerDto> AskAsync(
+        Guid patientId,
+        string question,
+        IReadOnlyList<ChatTurn>? history = null,
+        CancellationToken ct = default);
+
+    /// <summary>The stored conversation, oldest first, so a reopened drawer resumes where it was.</summary>
+    Task<IReadOnlyList<ChatMessageDto>> GetHistoryAsync(Guid patientId, CancellationToken ct = default);
 }
 
 public sealed partial class GroundedChatService(
@@ -28,7 +35,24 @@ public sealed partial class GroundedChatService(
     IServiceProvider services,
     ILogger<GroundedChatService> logger) : IGroundedChatService
 {
-    public async Task<ChatAnswerDto> AskAsync(Guid patientId, string question, CancellationToken ct = default)
+    /// <summary>
+    /// How many completed exchanges travel with a question.
+    ///
+    /// Four, not the whole session. The record is already the large half of this prompt — sixteen
+    /// documents of medications, warnings and findings — and every turn added competes with it for
+    /// the same capped output budget (§11.2). A follow-up chain at a demo is two or three turns;
+    /// four covers that with room, and an older exchange is not what "when?" refers to.
+    /// </summary>
+    private const int MaxHistoryTurns = 4;
+
+    /// <summary>A prior answer is quoted for context only, so it is kept short.</summary>
+    private const int MaxHistoryAnswerLength = 400;
+
+    public async Task<ChatAnswerDto> AskAsync(
+        Guid patientId,
+        string question,
+        IReadOnlyList<ChatTurn>? history = null,
+        CancellationToken ct = default)
     {
         var ai = services.GetService<IAiClient>();
 
@@ -44,8 +68,10 @@ public sealed partial class GroundedChatService(
             return new ChatAnswerDto
             {
                 AnswerEn = "There is nothing in your records yet. Upload some documents and I can answer questions about them.",
+                AskedLanguage = AskedLanguage.English,
                 Citations = [],
                 Confidence = 100,
+                SafetyRefusal = false,
                 ConsultProfessional = false,
                 FoundInDocuments = false
             };
@@ -56,14 +82,9 @@ public sealed partial class GroundedChatService(
             var prompt = prompts.Get("chat", new Dictionary<string, string>
             {
                 ["RECORD"] = record,
+                ["HISTORY"] = FormatHistory(history),
                 ["QUESTION"] = question.Trim()
             });
-
-            // TEMPORARY DIAGNOSTIC — remove. Logs the exact prompt and the raw reply, verbatim,
-            // to find where a printed-warning question turns into "not found". Contains PHI: do
-            // not ship, and do not leave enabled outside a local investigation.
-            logger.LogWarning("=== CHAT PROMPT for {PatientId} ===\n{Prompt}\n=== END CHAT PROMPT ===",
-                patientId, prompt);
 
             // The question is already inside the system prompt ({{QUESTION}}), surrounded by the
             // intent-matching instructions. Passing it again as the bare user message lets the
@@ -75,10 +96,6 @@ public sealed partial class GroundedChatService(
                 prompt,
                 "Answer the question above as JSON. Prefer Findings over a not-found reply when they match the intent.",
                 ct: ct);
-
-            // TEMPORARY DIAGNOSTIC — remove.
-            logger.LogWarning("=== CHAT RAW RESPONSE for {PatientId} (model {Model}) ===\n{Content}\n=== END CHAT RAW RESPONSE ===",
-                patientId, completion.Model, completion.Content);
 
             if (!JsonResponseReader.TryRead<ChatResponse>(completion.Content, out var answer, out var error))
             {
@@ -99,24 +116,155 @@ public sealed partial class GroundedChatService(
                 .Distinct()
                 .ToList();
 
-            var confidence = Math.Clamp(answer.Confidence, 0, 100);
+            // A refusal to judge safety is not an absent fact. It never counts as "found", and it
+            // is never presented as a gap in the person's records.
+            var safetyRefusal = answer.SafetyRefusal;
+            var found = answer.FoundInDocuments && !safetyRefusal;
 
-            return new ChatAnswerDto
+            // Decided here, not by the model. The same question asked twice returned "Low · 0%"
+            // once and "High · 100%" the other time, because both readings are defensible and
+            // nothing pinned one down. Fixed at 100 with a stated meaning: having read the whole
+            // record, this is certainly not in it. The interface does not show it as a trust
+            // percentage — a number against "I could not find that" measures nothing the reader
+            // wants — but the field has to hold something, and a value that varies run to run is
+            // the one thing it must not hold.
+            var confidence = found
+                ? Math.Clamp(answer.Confidence, 0, 100)
+                : 100;
+
+            var result = new ChatAnswerDto
             {
                 AnswerEn = answer.AnswerEn ?? "I could not find that in your uploaded documents.",
                 AnswerTa = answer.AnswerTa,
+                AnswerTanglish = answer.AnswerTanglish,
+                AskedLanguage = ParseLanguage(answer.AskedLanguage),
                 Citations = citations,
                 Confidence = confidence,
-                // Forced on for low confidence regardless of what the model decided (§11.4, FR-7.6).
-                ConsultProfessional = answer.ConsultProfessional || confidence < 50,
-                FoundInDocuments = answer.FoundInDocuments
+                SafetyRefusal = safetyRefusal,
+                // Forced on for low confidence regardless of what the model decided (§11.4,
+                // FR-7.6), and always on a safety refusal — the question was about risk, and the
+                // answer is that a person has to judge it.
+                ConsultProfessional = answer.ConsultProfessional || safetyRefusal || confidence < 50,
+                FoundInDocuments = found
             };
+
+            await RememberAsync(patientId, question, result, ct);
+
+            return result;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Chat failed for {PatientId}", patientId);
             return Unavailable("I could not reach the question service. Please try again in a moment.");
         }
+    }
+
+    public async Task<IReadOnlyList<ChatMessageDto>> GetHistoryAsync(
+        Guid patientId, CancellationToken ct = default) =>
+        await db.ChatMessages
+            .AsNoTracking()
+            .Where(m => m.PatientId == patientId)
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new ChatMessageDto
+            {
+                Question = m.Question,
+                Answer = new ChatAnswerDto
+                {
+                    AnswerEn = m.AnswerEn,
+                    AnswerTa = m.AnswerTa,
+                    AnswerTanglish = m.AnswerTanglish,
+                    AskedLanguage = m.AskedLanguage,
+                    Citations = m.Citations,
+                    Confidence = m.Confidence,
+                    SafetyRefusal = m.SafetyRefusal,
+                    ConsultProfessional = m.ConsultProfessional,
+                    FoundInDocuments = m.FoundInDocuments
+                },
+                AskedAt = m.CreatedAt
+            })
+            .ToListAsync(ct);
+
+    /// <summary>
+    /// Stores the completed turn so a reopened drawer is not blank.
+    ///
+    /// Never allowed to cost the user their answer: the answer has already been produced and is
+    /// about to be returned, and failing the request because a history row could not be written
+    /// would trade something they asked for against something they did not.
+    /// </summary>
+    private async Task RememberAsync(
+        Guid patientId, string question, ChatAnswerDto answer, CancellationToken ct)
+    {
+        try
+        {
+            db.ChatMessages.Add(new ChatMessage
+            {
+                PatientId = patientId,
+                Question = question.Trim(),
+                AnswerEn = answer.AnswerEn,
+                AnswerTa = answer.AnswerTa,
+                AnswerTanglish = answer.AnswerTanglish,
+                AskedLanguage = answer.AskedLanguage,
+                Citations = [.. answer.Citations],
+                Confidence = answer.Confidence,
+                SafetyRefusal = answer.SafetyRefusal,
+                ConsultProfessional = answer.ConsultProfessional,
+                FoundInDocuments = answer.FoundInDocuments
+            });
+
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Could not store the chat turn for {PatientId}", patientId);
+        }
+    }
+
+    /// <summary>
+    /// The recent conversation, rendered into its own clearly fenced section.
+    ///
+    /// Kept structurally distinct from the record so the model cannot read a sentence the *user*
+    /// typed, or one it produced itself last turn, as something a document says. The section is
+    /// empty — not an empty heading — when there is nothing to show, so a first question looks
+    /// exactly as it did before this existed.
+    /// </summary>
+    private static string FormatHistory(IReadOnlyList<ChatTurn>? history)
+    {
+        var recent = (history ?? [])
+            .Where(turn => !string.IsNullOrWhiteSpace(turn.Question))
+            .TakeLast(MaxHistoryTurns)
+            .ToList();
+
+        if (recent.Count == 0) return string.Empty;
+
+        var builder = new StringBuilder();
+
+        builder.AppendLine("# Earlier in this conversation");
+        builder.AppendLine();
+        builder.AppendLine(
+            "Context for resolving what the new question refers to — \"it\", \"that drug\", " +
+            "\"when?\". **This is not a source.** Nothing below is part of the record. An answer " +
+            "you gave earlier is not evidence that something is true about this person: if a claim " +
+            "appears here but not in the record above, do not repeat it as fact, and never cite a " +
+            "turn — citations are document ids from the record, only.");
+        builder.AppendLine();
+
+        foreach (var turn in recent)
+        {
+            builder.AppendLine($"- User asked: {OneLine(turn.Question)}");
+            builder.AppendLine($"  You answered: {Shorten(OneLine(turn.Answer))}");
+        }
+
+        builder.AppendLine();
+        return builder.ToString();
+    }
+
+    private static string Shorten(string? answer)
+    {
+        if (string.IsNullOrWhiteSpace(answer)) return "(no answer recorded)";
+
+        return answer.Length <= MaxHistoryAnswerLength
+            ? answer
+            : answer[..MaxHistoryAnswerLength] + "…";
     }
 
     /// <summary>
@@ -130,6 +278,7 @@ public sealed partial class GroundedChatService(
             .AsNoTracking()
             .Where(d => d.PatientId == patientId)
             .Include(d => d.Medications)
+            .Include(d => d.Diagnoses)
             .Include(d => d.LabResults)
             .OrderBy(d => d.DocumentDate == null)
             .ThenBy(d => d.DocumentDate)
@@ -174,6 +323,17 @@ public sealed partial class GroundedChatService(
             {
                 // Told to the model so it can qualify an answer that rests on a weak reading.
                 builder.AppendLine($"NOTE: this document read poorly (confidence {document.OverallConfidence}).");
+            }
+
+            // Before the medications, so the condition and the drugs prescribed for it sit
+            // together under one document heading. That adjacency is the whole point: "what was I
+            // given for malaria?" is answerable only if the word MALARIA and the four drugs
+            // printed beneath it are visibly part of the same visit (FR-7.2).
+            foreach (var d in document.Diagnoses)
+            {
+                builder.Append("- Diagnosis recorded on this document: ").Append(OneLine(d.Text));
+                if (d.SourceText is { } source) builder.Append($" (printed as \"{OneLine(source)}\")");
+                builder.AppendLine();
             }
 
             foreach (var m in document.Medications)
@@ -271,19 +431,39 @@ public sealed partial class GroundedChatService(
     [GeneratedRegex(@"\s+")]
     private static partial Regex Whitespace();
 
+    /// <summary>
+    /// Anything unrecognised falls back to English. The demo is in English, and a model that
+    /// mislabels or omits this field must not change what an English question does.
+    /// </summary>
+    private static AskedLanguage ParseLanguage(string? language) =>
+        language?.Trim().ToLowerInvariant() switch
+        {
+            "tamil" or "ta" => AskedLanguage.Tamil,
+            "tanglish" => AskedLanguage.Tanglish,
+            _ => AskedLanguage.English
+        };
+
     private static ChatAnswerDto Unavailable(string message) => new()
     {
         AnswerEn = message,
+        AskedLanguage = AskedLanguage.English,
         Citations = [],
+        // A service failure is the one case where the number genuinely means "no support at all":
+        // nothing was read, so nothing is known either way. Distinct from a not-found, which has
+        // read the whole record.
         Confidence = 0,
+        SafetyRefusal = false,
         ConsultProfessional = true,
         FoundInDocuments = false
     };
 
     private sealed record ChatResponse
     {
+        [JsonPropertyName("safetyRefusal")] public bool SafetyRefusal { get; init; }
         [JsonPropertyName("answerEn")] public string? AnswerEn { get; init; }
         [JsonPropertyName("answerTa")] public string? AnswerTa { get; init; }
+        [JsonPropertyName("answerTanglish")] public string? AnswerTanglish { get; init; }
+        [JsonPropertyName("askedLanguage")] public string? AskedLanguage { get; init; }
         [JsonPropertyName("citations")] public IReadOnlyList<string> Citations { get; init; } = [];
         [JsonPropertyName("confidence")] public int Confidence { get; init; }
         [JsonPropertyName("consultProfessional")] public bool ConsultProfessional { get; init; }

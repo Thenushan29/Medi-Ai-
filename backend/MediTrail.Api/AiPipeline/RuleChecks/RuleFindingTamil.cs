@@ -102,6 +102,15 @@ public static class RuleFindingTamil
                "படிக்க முடிந்தவற்றை மட்டுமே இந்தக் கண்டுபிடிப்புகள் உள்ளடக்கும்.";
     }
 
+    /// <summary>
+    /// Medications read off the page whose active ingredient could not be resolved, so no
+    /// cross-check could include them.
+    /// </summary>
+    public static string UnresolvedMedication(IReadOnlyList<string> names) =>
+        $"{names.Count} மருந்தின் ({string.Join(", ", names)}) செயல்படு மூலப்பொருளை உறுதியாக " +
+        "அடையாளம் காண முடியவில்லை. எனவே அவை மேலே உள்ள பரிசோதனைகளில் — இடைவினை, நகல், " +
+        "ஒவ்வாமை சோதனைகளில் — சேர்க்கப்படவில்லை. மருந்தாளுநரிடம் இவற்றைக் காட்டி உறுதிப்படுத்துங்கள்.";
+
     // ---- helpers ----
 
     /// <summary>

@@ -7,11 +7,17 @@ public class DrugNameNormalizerTests
 {
     [Theory]
     [InlineData("Betaloc", "metoprolol")]
-    [InlineData("Oxprelol", null)]          // misspelt brand — not in the table, honestly null
     [InlineData("Crocin", "paracetamol")]
     [InlineData("TAB. CROCINE", "paracetamol")]
     [InlineData("Lipitor 10mg", "atorvastatin")]
     [InlineData("Rantac", "ranitidine")]
+    // Printed as "Oxprelol" on patient_y_year3_6. This case previously expected null — an honest
+    // answer while the table did not know the name, but the measured cost was traps.md Y3: the
+    // model declines the misspelling (Y12), nothing else resolves it, and a null generic is
+    // excluded from every cross-check, so the beta-blocker alert named two drugs instead of three.
+    // The table now carries it, which is a review-able place for the decision to live.
+    [InlineData("Oxprelol", "oxprenolol")]
+    [InlineData("Oxprelol 50mg", "oxprenolol")]
     [InlineData("DEMO MEDICINE 1", null)]
     [InlineData("Zzyxbrand", null)]
     public void ResolvesKnownBrandsAndAdmitsUnknownOnes(string brand, string? expected) =>
@@ -24,6 +30,33 @@ public class DrugNameNormalizerTests
         // The point of the fallback: Betaloc must reach the beta-blocker class, so that
         // prescribing it alongside atenolol is detected as duplicate therapy.
         Assert.Equal("beta blocker", DrugNameNormalizer.ClassOf(DrugNameNormalizer.GenericForBrand("Betaloc")));
+
+    [Theory]
+    // A combination product is one slash-separated generic, so every whole-string lookup is blind
+    // to what is inside it — how warfarin + aspirin was dropped as ungrounded (traps.md X1).
+    [InlineData("aspirin/codeine", "aspirin", true)]
+    [InlineData("aspirin", "aspirin/codeine", true)]
+    [InlineData("ibuprofen/paracetamol", "acetaminophen", true)]   // via the synonym table
+    [InlineData("aspirin/codeine", "warfarin", false)]
+    [InlineData("aspirin/codeine", null, false)]
+    [InlineData(null, "aspirin", false)]
+    public void SharesComponentSeesInsideACombinationProduct(string? a, string? b, bool expected) =>
+        Assert.Equal(expected, DrugNameNormalizer.SharesComponent(a, b));
+
+    [Fact]
+    public void AreSameDrugStaysStricterThanSharesComponent() =>
+        // Duplicate detection asks whether this is the same prescription written twice, and two
+        // products sharing one ingredient are not. The overlap between them is the class check's
+        // finding, worded as such.
+        Assert.False(DrugNameNormalizer.AreSameDrug("aspirin/codeine", "aspirin"));
+
+    [Theory]
+    [InlineData("aspirin/codeine", "nsaid")]
+    [InlineData("ibuprofen/paracetamol", "nsaid")]
+    [InlineData("amoxicillin/clavulanic acid", "penicillin")]
+    [InlineData("doxylamine/pyridoxine/folic acid", null)]   // no ingredient is in the table
+    public void CombinationProductTakesItsIngredientsClass(string generic, string? expected) =>
+        Assert.Equal(expected, DrugNameNormalizer.ClassOf(generic));
 
     [Theory]
     // The equivalence the whole evaluation dataset turns on (traps.md Y1).

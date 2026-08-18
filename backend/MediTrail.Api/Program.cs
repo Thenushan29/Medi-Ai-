@@ -44,7 +44,12 @@ var connectionString = builder.Configuration.GetConnectionString("Postgres")
         "ConnectionStrings:Postgres is not configured. Set it via environment or user-secrets.");
 
 builder.Services.AddDbContext<MediTrailDbContext>(options => options
-    .UseNpgsql(connectionString)
+    // Supabase's pooler closes idle connections, and the first request after a quiet spell then
+    // dies with "connection forcibly closed" — observed live after a credential rotation, and
+    // exactly what a demo hits when the app has sat idle before the judges arrive. Three quick
+    // retries absorb it. Safe here because nothing uses explicit transactions; if that changes,
+    // the strategy requires them to go through CreateExecutionStrategy.
+    .UseNpgsql(connectionString, npgsql => npgsql.EnableRetryOnFailure(maxRetryCount: 3))
     .UseSnakeCaseNamingConvention());
 
 // ---------------------------------------------------------------------------
