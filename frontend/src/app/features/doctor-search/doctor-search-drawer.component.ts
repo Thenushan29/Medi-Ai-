@@ -6,6 +6,7 @@ import type {
   AvailabilityWindow,
   CreateDoctorSearchRequest,
   DoctorSearchResponse,
+  FacilityResult,
   SpecialtyOption,
   SpecialtyResolution
 } from '../../core/models';
@@ -197,13 +198,139 @@ const AVAILABILITY: { value: AvailabilityWindow; label: string; hint: string }[]
             @if (searching()) {
               <p class="text-sm text-slate-600">Looking up nearby facilities from public map data…</p>
               <div class="mt-4 space-y-3" aria-busy="true">
-                <div class="h-24 animate-pulse rounded-xl bg-slate-100"></div>
-                <div class="h-24 animate-pulse rounded-xl bg-slate-100"></div>
-                <div class="h-24 animate-pulse rounded-xl bg-slate-100"></div>
+                <div class="h-40 animate-pulse rounded-xl bg-slate-100"></div>
+                <div class="h-40 animate-pulse rounded-xl bg-slate-100"></div>
+                <div class="h-40 animate-pulse rounded-xl bg-slate-100"></div>
               </div>
             } @else if (searchResult(); as result) {
               <p class="text-sm text-slate-600">
-                {{ result.message ?? facilityCountLabel(result.results.length) }}
+                {{ result.message ?? facilityCountLabel(result.results?.length ?? 0) }}
+              </p>
+              @if (result.origin?.resolvedPlace || result.radiusMeters) {
+                <p class="mt-1 text-xs text-slate-500">
+                  @if (result.origin?.resolvedPlace) {
+                    Near {{ result.origin.resolvedPlace }}
+                  }
+                  @if (result.radiusMeters) {
+                    · within {{ kmLabel(result.radiusMeters) }}
+                  }
+                </p>
+              }
+
+              @if (result.status === 'ok' && (result.results?.length ?? 0) > 0) {
+                <ul class="mt-4 space-y-4">
+                  @for (facility of result.results; track facility.sourceRef) {
+                    <li class="rounded-xl border border-slate-200 bg-white px-4 py-4">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                          <h3 class="font-medium text-slate-900">{{ displayName(facility) }}</h3>
+                        </div>
+                        <span class="shrink-0 rounded-full border border-slate-200 px-2 py-0.5 text-xs text-slate-600">
+                          {{ availabilityBadge(facility.availabilityMatch) }}
+                        </span>
+                      </div>
+
+                      <dl class="mt-3 space-y-1.5 text-sm text-slate-700">
+                        <div class="flex gap-2">
+                          <dt class="w-24 shrink-0 text-xs text-slate-500">Category</dt>
+                          <dd>{{ categoryLabel(facility.category) }}</dd>
+                        </div>
+                        <div class="flex gap-2">
+                          <dt class="w-24 shrink-0 text-xs text-slate-500">Specialty</dt>
+                          <dd>{{ listed(facility.specialtyTag) }}</dd>
+                        </div>
+                        <div class="flex gap-2">
+                          <dt class="w-24 shrink-0 text-xs text-slate-500">Address</dt>
+                          <dd>{{ listed(facility.address) }}</dd>
+                        </div>
+                        <div class="flex gap-2">
+                          <dt class="w-24 shrink-0 text-xs text-slate-500">Distance</dt>
+                          <dd>{{ distanceLabel(facility.distanceMeters) }}</dd>
+                        </div>
+                        <div class="flex gap-2">
+                          <dt class="w-24 shrink-0 text-xs text-slate-500">Phone</dt>
+                          <dd>
+                            @if (facility.phone?.trim()) {
+                              <a class="text-brand-700" [href]="'tel:' + facility.phone">{{ facility.phone }}</a>
+                            } @else {
+                              Not listed
+                            }
+                          </dd>
+                        </div>
+                        <div class="flex gap-2">
+                          <dt class="w-24 shrink-0 text-xs text-slate-500">Website</dt>
+                          <dd>
+                            @if (facility.website?.trim(); as site) {
+                              <a class="break-all text-brand-700" [href]="websiteHref(site)" target="_blank" rel="noopener">{{ site }}</a>
+                            } @else {
+                              Not listed
+                            }
+                          </dd>
+                        </div>
+                        <div class="flex gap-2">
+                          <dt class="w-24 shrink-0 text-xs text-slate-500">Hours</dt>
+                          <dd class="break-words font-mono text-xs">{{ listed(facility.openingHours) }}</dd>
+                        </div>
+                      </dl>
+
+                      <button
+                        type="button"
+                        class="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-700"
+                        (click)="toggleRank(facility.sourceRef)"
+                        [attr.aria-expanded]="rankOpen()[facility.sourceRef] === true"
+                      >
+                        Why ranked here ▸
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-3.5 w-3.5" [class.rotate-180]="rankOpen()[facility.sourceRef]" aria-hidden="true">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                      @if (rankOpen()[facility.sourceRef]) {
+                        <ul class="mt-2 list-disc space-y-0.5 pl-5 text-xs text-slate-600">
+                          @for (reason of facility.rankReasons ?? []; track reason) {
+                            <li>{{ reason }}</li>
+                          }
+                        </ul>
+                      }
+
+                      <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                        <a
+                          class="text-sm font-medium text-brand-700"
+                          [href]="mapHref(facility)"
+                          target="_blank"
+                          rel="noopener"
+                        >
+                          Open in map
+                        </a>
+                        <p class="text-[11px] text-slate-500">
+                          {{ sourceLabel(result.provider) }}
+                          ·
+                          {{ fetchedLabel(result.fetchedAtUtc) }}
+                          @if (result.servedFromCache) {
+                            · cached
+                          }
+                        </p>
+                      </div>
+                    </li>
+                  }
+                </ul>
+              }
+
+              @if (result.attribution) {
+                <p class="mt-4 text-[11px] text-slate-400">{{ result.attribution }}</p>
+              }
+
+              <p class="mt-6 border-t border-slate-100 pt-4 text-xs leading-relaxed text-slate-500">
+                MediTrail does not diagnose. These are nearby facilities from public map data, not a
+                referral. MediTrail does not verify practitioner registration —
+                <a
+                  href="https://slmc.gov.lk/public/en/services/public"
+                  target="_blank"
+                  rel="noopener"
+                  class="font-medium text-brand-700"
+                >
+                  check the SLMC public register
+                  <span aria-hidden="true">↗</span>
+                </a>
               </p>
             }
           }
@@ -264,6 +391,7 @@ export class DoctorSearchDrawerComponent {
   protected readonly searchError = signal<string | null>(null);
   protected readonly searching = signal(false);
   protected readonly searchResult = signal<DoctorSearchResponse | null>(null);
+  protected readonly rankOpen = signal<Record<string, boolean>>({});
 
   protected readonly canSearch = computed(() => {
     const located =
@@ -338,6 +466,7 @@ export class DoctorSearchDrawerComponent {
     this.searching.set(true);
     this.searchError.set(null);
     this.searchResult.set(null);
+    this.rankOpen.set({});
     this.step.set(3);
 
     this.api.searchDoctors(this.patientId(), body).subscribe({
@@ -356,6 +485,72 @@ export class DoctorSearchDrawerComponent {
   protected facilityCountLabel(count: number): string {
     if (count === 1) return '1 nearby facility from public map data.';
     return `${count} nearby facilities from public map data.`;
+  }
+
+  protected listed(value: string | null | undefined): string {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : 'Not listed';
+  }
+
+  protected displayName(facility: FacilityResult): string {
+    const name = facility.name?.trim();
+    if (name) return name;
+    const type = facility.category?.trim();
+    if (type) return this.categoryLabel(type);
+    return 'Not listed';
+  }
+
+  protected categoryLabel(category: string | null | undefined): string {
+    const raw = category?.trim();
+    if (!raw) return 'Not listed';
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+
+  protected distanceLabel(meters: number): string {
+    return `${(meters / 1000).toFixed(1)} km straight-line`;
+  }
+
+  protected kmLabel(meters: number): string {
+    return `${(meters / 1000).toFixed(0)} km`;
+  }
+
+  protected availabilityBadge(match: string): string {
+    switch (match) {
+      case 'match':
+        return 'Hours match';
+      case 'indeterminate':
+        return 'Hours unclear';
+      case 'no_match':
+        return 'May not match';
+      default:
+        return 'Hours unknown';
+    }
+  }
+
+  protected websiteHref(site: string): string {
+    return /^https?:\/\//i.test(site) ? site : `https://${site}`;
+  }
+
+  protected mapHref(facility: FacilityResult): string {
+    if (facility.mapUrl?.trim()) return facility.mapUrl.trim();
+    return `https://www.openstreetmap.org/?mlat=${facility.latitude}&mlon=${facility.longitude}#map=17/${facility.latitude}/${facility.longitude}`;
+  }
+
+  protected sourceLabel(provider: string): string {
+    return provider === 'openstreetmap' ? 'OpenStreetMap' : provider;
+  }
+
+  protected fetchedLabel(iso: string | undefined): string {
+    if (!iso) return 'Not listed';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return 'Not listed';
+    return (
+      date.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) + ' UTC'
+    );
+  }
+
+  protected toggleRank(sourceRef: string): void {
+    this.rankOpen.update(open => ({ ...open, [sourceRef]: !open[sourceRef] }));
   }
 
   private load(): void {
