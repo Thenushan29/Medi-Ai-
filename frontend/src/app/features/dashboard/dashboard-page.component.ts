@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import { ApiService } from '../../core/api.service';
+import { LanguageService } from '../../core/language.service';
 import { ConfidenceBadgeComponent } from '../../shared/confidence-badge.component';
 import { AlertsViewComponent } from './alerts-view.component';
 import { ChatDrawerComponent } from './chat-drawer.component';
@@ -31,19 +32,30 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
     <section class="mx-auto max-w-5xl px-6 py-10">
       @if (patient(); as p) {
         <header class="border-b border-slate-200 pb-6">
-          <!-- Name left, add-documents right (FR-2.9). items-start keeps the two aligned on a
+          <!-- Name left, actions right (FR-2.9). items-start keeps them aligned on a
                narrow screen where the name wraps, and leaves the chips below flush left. -->
           <div class="flex items-start justify-between gap-4">
             <h1 class="text-2xl font-semibold tracking-tight text-slate-900">{{ p.displayName }}</h1>
 
-            <!-- Secondary, not primary: the point of this screen is reading the findings. -->
-            <a
-              [routerLink]="['/patients', patientId(), 'upload']"
-              aria-label="Add more documents for this patient"
-              class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-700"
-            >
-              + Add documents
-            </a>
+            <div class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              @if (p.status === 'Ready' || p.status === 'Failed') {
+                <a
+                  [routerLink]="['/patients', patientId(), 'summary']"
+                  aria-label="Open the printable summary for a doctor or pharmacist"
+                  class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-700"
+                >
+                  {{ language.pick('Show this to a doctor', 'மருத்துவரிடம் காட்டுங்கள்') }}
+                </a>
+              }
+              <!-- Secondary, not primary: the point of this screen is reading the findings. -->
+              <a
+                [routerLink]="['/patients', patientId(), 'upload']"
+                aria-label="Add more documents for this patient"
+                class="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 hover:border-brand-500 hover:text-brand-700"
+              >
+                + Add documents
+              </a>
+            </div>
           </div>
 
           <div class="mt-4 flex flex-wrap gap-2">
@@ -300,6 +312,7 @@ type Tab = 'timeline' | 'medications' | 'labs' | 'alerts';
 })
 export class DashboardPageComponent {
   private readonly api = inject(ApiService);
+  protected readonly language = inject(LanguageService);
 
   readonly patientId = input.required<string>();
 

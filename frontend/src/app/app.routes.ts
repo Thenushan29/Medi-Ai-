@@ -26,6 +26,12 @@ export const routes: Routes = [
     title: 'Reading records · MediTrail'
   },
   {
+    path: 'patients/:patientId/summary',
+    loadComponent: () =>
+      import('./features/summary/summary-page.component').then(m => m.SummaryPageComponent),
+    title: 'Show this to a doctor · MediTrail'
+  },
+  {
     path: 'patients/:patientId',
     loadComponent: () =>
       import('./features/dashboard/dashboard-page.component').then(m => m.DashboardPageComponent),
