@@ -3,15 +3,19 @@ import { Router } from '@angular/router';
 import { Subscription, switchMap, timer } from 'rxjs';
 
 import { ApiService } from '../../core/api.service';
+import { LanguageService } from '../../core/language.service';
 import type { PatientStatus, ProcessingStatus } from '../../core/models';
 
-/** The named pipeline stages the user sees (§10.3). This screen is a feature, not a spinner. */
-const STAGES: { key: PatientStatus; label: string }[] = [
-  { key: 'Extracting', label: 'Reading documents' },
-  { key: 'Merging', label: 'Building timeline' },
-  { key: 'CrossChecking', label: 'Cross-checking medications' },
-  { key: 'Verifying', label: 'Verifying against drug data' },
-  { key: 'AnalyzingTrends', label: 'Analyzing lab trends' }
+/**
+ * Named pipeline stages the user sees (§10.3). Must match what PatientAnalyzer actually writes.
+ * Lab trends are computed on GET /labs, not in this run — they are not a background stage
+ * (Round 2 R2-0.4). AnalyzingTrends remains on the wire enum so stored ordinals stay stable.
+ */
+const STAGES: { key: PatientStatus; en: string; ta: string }[] = [
+  { key: 'Extracting', en: 'Reading documents', ta: 'ஆவணங்களைப் படிக்கிறது' },
+  { key: 'Merging', en: 'Building timeline', ta: 'காலவரிசையை உருவாக்குகிறது' },
+  { key: 'CrossChecking', en: 'Cross-checking medications', ta: 'மருந்துகளை ஒப்பிடுகிறது' },
+  { key: 'Verifying', en: 'Verifying against drug data', ta: 'மருந்துத் தரவுடன் உறுதிப்படுத்துகிறது' }
 ];
 
 @Component({
@@ -19,9 +23,20 @@ const STAGES: { key: PatientStatus; label: string }[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="mx-auto max-w-2xl px-6 py-12">
-      <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Reading your records</h1>
+      <h1 class="text-2xl font-semibold tracking-tight text-slate-900">
+        {{ language.pick('Reading your records', 'உங்கள் பதிவுகளைப் படிக்கிறோம்') }}
+      </h1>
       <p class="mt-1 text-sm text-slate-500">
-        This usually takes a minute or two. You can leave this page open — nothing is lost if you refresh.
+        {{ language.pick(
+          'This usually takes a minute or two. You can leave this page open — nothing is lost if you refresh.',
+          'இது ஒரு அல்லது இரு நிமிடங்கள் ஆகலாம். இந்தப் பக்கத்தைத் திறந்து வைக்கலாம் — புதுப்பித்தாலும் எதுவும் தொலைவதில்லை.'
+        ) }}
+      </p>
+      <p class="mt-2 text-xs text-slate-400">
+        {{ language.pick(
+          'Lab trends are calculated when you open that tab, not in this background run. A cached file is byte-identical to one already read — no second AI call.',
+          'ஆய்வகப் போக்குகள் அந்தத் தாவலைத் திறக்கும்போது கணக்கிடப்படுகின்றன, இந்தப் பின்னணி ஓட்டத்தில் அல்ல. ஒரே கோப்பின் நகல் மீண்டும் AI அழைப்பை ஏற்படுத்தாது.'
+        ) }}
       </p>
 
       <ol class="mt-10 space-y-1">
@@ -35,7 +50,7 @@ const STAGES: { key: PatientStatus; label: string }[] = [
               {{ stageIndex() > i ? '✓' : i + 1 }}
             </span>
             <span class="text-sm" [class]="stageIndex() >= i ? 'text-slate-900' : 'text-slate-400'">
-              {{ stage.label }}
+              {{ language.pick(stage.en, stage.ta) }}
             </span>
           </li>
         }
@@ -82,6 +97,7 @@ const STAGES: { key: PatientStatus; label: string }[] = [
 export class ProcessingPageComponent implements OnDestroy {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
+  protected readonly language = inject(LanguageService);
   private poll?: Subscription;
 
   readonly patientId = input.required<string>();
@@ -93,7 +109,11 @@ export class ProcessingPageComponent implements OnDestroy {
   protected readonly stageIndex = computed(() => {
     const current = this.status()?.status;
     if (!current) return 0;
-    if (current === 'Ready' || current === 'Failed') return STAGES.length;
+    // AnalyzingTrends is a leftover enum value the analyzer never writes. Treat it as finished
+    // so a stale row cannot rewind the stepper to "Reading documents".
+    if (current === 'Ready' || current === 'Failed' || current === 'AnalyzingTrends') {
+      return STAGES.length;
+    }
     const index = STAGES.findIndex(s => s.key === current);
     return index < 0 ? 0 : index;
   });

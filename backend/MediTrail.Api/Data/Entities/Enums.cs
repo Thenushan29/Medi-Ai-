@@ -23,6 +23,10 @@ public enum PatientStatus
     Merging,
     CrossChecking,
     Verifying,
+    /// <summary>
+    /// Kept so stored integer ordinals stay stable. <c>PatientAnalyzer</c> never writes this —
+    /// lab trends run on <c>GET /labs</c>, not in the background worker (Round 2 R2-0.4).
+    /// </summary>
     AnalyzingTrends,
     Ready,
     Failed

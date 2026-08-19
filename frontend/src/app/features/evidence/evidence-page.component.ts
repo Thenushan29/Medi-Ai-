@@ -105,8 +105,25 @@ import type { Alert, Allergy, DocumentDetail, Medication } from '../../core/mode
                 </p>
               }
 
-              @if (d.extractionModel) {
-                <p class="mt-3 text-xs text-slate-400">Read by {{ d.extractionModel }}</p>
+              @if (d.extractionModel || d.status === 'Cached') {
+                <div class="mt-3 flex flex-wrap gap-2">
+                  @if (d.extractionModel) {
+                    <span
+                      class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700"
+                      title="The vision model that produced this extraction (FR-3.8)."
+                    >
+                      Read by {{ d.extractionModel }}
+                    </span>
+                  }
+                  @if (d.status === 'Cached') {
+                    <span
+                      class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600"
+                      title="Byte-identical to a file already read, so this extraction was reused."
+                    >
+                      Same file — reused, no AI call
+                    </span>
+                  }
+                </div>
               }
             </div>
 

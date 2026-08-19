@@ -21,7 +21,7 @@ import { DisclaimerComponent } from './shared/disclaimer.component';
             <span class="hidden text-xs text-slate-400 sm:inline">Medical record cross-checker</span>
           </a>
 
-          <div class="flex items-center gap-1 rounded-lg border border-slate-200 p-0.5">
+          <div class="flex items-center gap-1 rounded-lg border border-slate-200 p-0.5 print:hidden">
             <button
               type="button"
               class="rounded px-2.5 py-1 text-xs font-medium"

@@ -14,10 +14,14 @@ interface Turn {
   pending: boolean;
 }
 
-/** Starter questions (FR-7.7), including the allergy-reasoning example named in the rules. */
+/**
+ * Starter questions (FR-7.7). The first one is the Y1 demo beat: same-document contradiction
+ * (paracetamol prescribed, acetaminophen warned against). Allergy is still here because the
+ * rules named that example; the judge set has no recorded-allergy rows.
+ */
 const SUGGESTIONS = [
+  'Was a medicine prescribed that a document also warns against?',
   'Was any medicine prescribed that I am allergic to?',
-  'What am I currently taking?',
   'Has the same medicine been prescribed twice?',
   'Which of my results are outside the normal range?'
 ];

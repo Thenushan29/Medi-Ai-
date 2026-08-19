@@ -46,3 +46,9 @@
     outline-offset: 2px;
   }
 }
+
+@media print {
+  body {
+    background: white;
+  }
+}

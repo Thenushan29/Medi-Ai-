@@ -16,10 +16,14 @@ import type { LabTrend, TrendDirection } from '../../core/models';
   template: `
     @if (trends().length === 0) {
       <div class="rounded-xl border border-dashed border-slate-300 px-6 py-12 text-center">
-        <p class="text-sm text-slate-500">No numeric lab results were found in these documents.</p>
-        <p class="mx-auto mt-2 max-w-md text-xs text-slate-400">
-          Trends need test values with dates. Prescriptions that only list suggested investigations
-          have nothing to chart.
+        <p class="text-sm text-slate-700">
+          {{ language.pick('No numeric lab series in these documents.', 'இந்த ஆவணங்களில் எண்வரிசை ஆய்வக முடிவுகள் இல்லை.') }}
+        </p>
+        <p class="mx-auto mt-2 max-w-lg text-sm text-slate-500">
+          {{ language.pick(
+            'MediTrail will not invent a trend. Charts need dated numeric values — a suggested investigation with no result is not a reading.',
+            'MediTrail ஒரு போக்கை உருவாக்காது. தேதியுடன் கூடிய எண் மதிப்புகள் வேண்டும். பரிந்துரைக்கப்பட்ட பரிசோதனை ஒரு வாசிப்பு அல்ல.'
+          ) }}
         </p>
       </div>
     } @else {

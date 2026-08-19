@@ -43,6 +43,12 @@ That list doubles as the demonstration script.
 Start from `golden/_TEMPLATE.json`. Files whose name begins with `_` are ignored by the runner.
 Name each label file after its image — `patient_x_year1_rx.png` → `patient_x_year1_rx.json`.
 
+## `dataset/supplementary/` — Lab Trends demo only
+
+Three printed-style lab reports with a rising HbA1c / creatinine series. **Not the judge set.**
+See [supplementary/README.md](supplementary/README.md). Images are gitignored; generate them with
+`powershell -File dataset/supplementary/generate-lab-reports.ps1`.
+
 ## Running the accuracy check
 
 ```bash

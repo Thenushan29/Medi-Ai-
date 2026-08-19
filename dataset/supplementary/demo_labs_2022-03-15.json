@@ -1,0 +1,59 @@
+{
+  "_comment": "SUPPLEMENTARY — not part of the judge dataset. Printed lab report for the Lab Trends demo. Label what is printed.",
+
+  "documentType": "lab_report",
+  "documentDate": "2022-03-15",
+
+  "provider": {
+    "name": "Dr. N. Rajan",
+    "facility": "Jaffna Diagnostic Laboratory"
+  },
+
+  "patient": {
+    "name": "Demo labs — supplementary",
+    "age": "58",
+    "sex": "M"
+  },
+
+  "medications": [],
+  "allergies": [],
+  "warningsInDocument": [],
+  "diagnoses": [],
+  "unreadableSections": [],
+
+  "labResults": [
+    {
+      "testName": "HbA1c",
+      "testNameStandard": "hba1c",
+      "valueNumeric": 6.4,
+      "unit": "%",
+      "normalMin": 4.0,
+      "normalMax": 5.6,
+      "normalRangeText": "4.0 - 5.6",
+      "testDate": "2022-03-15",
+      "sourceText": "HbA1c    6.4 %    (4.0 - 5.6)"
+    },
+    {
+      "testName": "Creatinine",
+      "testNameStandard": "creatinine",
+      "valueNumeric": 0.9,
+      "unit": "mg/dL",
+      "normalMin": 0.6,
+      "normalMax": 1.2,
+      "normalRangeText": "0.6 - 1.2",
+      "testDate": "2022-03-15",
+      "sourceText": "Creatinine    0.9 mg/dL    (0.6 - 1.2)"
+    },
+    {
+      "testName": "ALT (SGPT)",
+      "testNameStandard": "alt",
+      "valueNumeric": 32,
+      "unit": "U/L",
+      "normalMin": 7,
+      "normalMax": 56,
+      "normalRangeText": "7 - 56",
+      "testDate": "2022-03-15",
+      "sourceText": "ALT (SGPT)    32 U/L    (7 - 56)"
+    }
+  ]
+}

@@ -83,6 +83,23 @@ public class TrendCalculatorTests
         Assert.Equal(TrendDirection.Stable, series.Direction);
     }
 
+    [Fact]
+    public void SupplementaryHba1cSeriesIsRising()
+    {
+        // dataset/supplementary demo reports: 6.4 → 7.1 → 8.2. Locked so the Lab Trends
+        // demo cannot silently stop being a trend if the threshold changes.
+        var series = TrendCalculator.Build("hba1c", "HbA1c", "%", 4.0m, 5.6m, "4.0 - 5.6",
+        [
+            new TrendPoint(new DateOnly(2022, 3, 15), 6.4m, true, Guid.NewGuid()),
+            new TrendPoint(new DateOnly(2023, 4, 10), 7.1m, true, Guid.NewGuid()),
+            new TrendPoint(new DateOnly(2024, 6, 2), 8.2m, true, Guid.NewGuid())
+        ]);
+
+        Assert.Equal(TrendDirection.Rising, series.Direction);
+        Assert.True(series.LatestOutOfRange);
+        Assert.Equal(3, series.OutOfRangeCount);
+    }
+
     private static TrendSeries Build((int Year, decimal Value)[] points) =>
         TrendCalculator.Build("alt", "SGPT (ALT)", "U/L", 7, 56, "7 - 56",
             points.Select(p => new TrendPoint(new DateOnly(p.Year, 1, 1), p.Value, false, Guid.NewGuid())));
