@@ -18,7 +18,7 @@ public sealed class DoctorRecommendationOptions
 
     public string NominatimBaseUrl { get; set; } = "https://nominatim.openstreetmap.org";
 
-    public string NominatimUserAgent { get; set; } = "MediTrail/1.0 (contact@example)";
+    public string NominatimUserAgent { get; set; } = "MediTrail/1.0 (https://github.com/Thenushan29/Medi-Ai-)";
 
     public int NominatimTimeoutSeconds { get; set; } = 10;
 

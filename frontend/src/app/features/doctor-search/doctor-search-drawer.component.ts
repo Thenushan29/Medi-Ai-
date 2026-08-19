@@ -249,7 +249,7 @@ const AVAILABILITY: { value: AvailabilityWindow; label: string; hint: string }[]
                     {{ result.status === 'not_configured' ? 'Search not configured' : 'Map data unreachable' }}
                   </p>
                   <p class="mt-2 text-sm leading-relaxed text-red-950">
-                    {{ result.message ?? 'We couldn\'t reach the map data service just now. Nothing is shown rather than showing you something unverified.' }}
+                    {{ result.message ?? "We couldn't reach the map data service just now. Nothing is shown rather than showing you something unverified." }}
                   </p>
                   @if (result.staleCache) {
                     <p class="mt-3 inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-900">
@@ -268,7 +268,7 @@ const AVAILABILITY: { value: AvailabilityWindow; label: string; hint: string }[]
                 <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-5">
                   <p class="text-xs font-semibold uppercase tracking-wide text-amber-800">Place not found</p>
                   <p class="mt-2 text-sm leading-relaxed text-amber-950">
-                    {{ result.message ?? 'We couldn\'t find that place. Try a nearby town or district.' }}
+                    {{ result.message ?? "We couldn't find that place. Try a nearby town or district." }}
                   </p>
                   <p class="mt-3 text-xs text-amber-900">Try a mapped town:</p>
                   <div class="mt-2 flex flex-wrap gap-2">
