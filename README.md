@@ -3,6 +3,8 @@
 **AI Medical Report & Prescription Cross-Checker** — YGC AI Competition 2026, Round 1.
 Team Dev HuHu.
 
+**Live link:** <!-- TODO: paste the deployed URL here before submission -->
+
 Upload photos or scans of medical documents collected across years and providers. A vision model
 reads every document, structured extraction merges them into one patient record, and a multi-stage
 analysis engine cross-checks for drug interactions, duplicate prescriptions, dosage conflicts,
@@ -35,7 +37,7 @@ frontend/                Angular 22 standalone + Tailwind v4
   src/app/features/      Patients, upload, processing, dashboard, evidence, doctor-search
   src/app/shared/        Disclaimer, confidence badge
 db/                      Schema SQL (generated) + views
-docs/                    PRD and Round 2 plan
+docs/                    PRD. The Round 2 plan is maintained outside the repository.
 scripts/                 Supabase setup; doctor-search cache pre-warm
 dataset/                 Evaluation documents (gitignored — PHI) and golden labels
 ```
@@ -132,6 +134,29 @@ clinic name):
 ./scripts/prewarm-doctor-cache.ps1
 # ./scripts/prewarm-doctor-cache.ps1 -BaseUrl http://localhost:5000 -PatientId <guid>
 ```
+
+### Doctor / pharmacist one-pager
+
+A printable summary at `/patients/{id}/summary`, reached from the patient dashboard once
+processing has finished. It reuses **already-persisted** alerts, medications, and lab
+trends — it makes **no additional model call**.
+
+It never diagnoses and never recommends starting, stopping, or changing a medication
+(PRD §5.3). What it actually renders:
+
+- Patient display name, document count, and (when both exist) earliest–latest document dates
+- An amber disclaimer that MediTrail is an information tool, not a diagnosis
+- **Findings** — severity chip, title, involved generics, confidence, bilingual explanation,
+  suggested action, verification status, source filenames, and a consult banner when the
+  finding requires a professional
+- **Medications** — display name, therapeutic class, a flagged marker when the group has a
+  conflict, and prescription count
+- **Lab trends** — test name, unit, reading count, direction, a latest-out-of-range note,
+  and bilingual explanation; if there is no numeric series, it says MediTrail will not
+  invent a trend
+
+English and Tamil copy use `LanguageService.pick()`. The page has **Print / save as PDF**
+and **← Back to dashboard**.
 
 ### What each field is, and what shows when it is missing
 

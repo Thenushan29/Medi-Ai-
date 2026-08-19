@@ -838,6 +838,8 @@ M2 gates everything: no downstream stage is built on unmeasured extraction quali
 
 ## 26. Future Roadmap (Post Round 1)
 
+Round 2 execution (Grand Finale, 21 August 2026) is planned outside this repository. This section remains the longer-term product intent.
+
 **Immediate hardening:** authentication with row-level security; private storage with signed URLs; persisted chat history; per-model execution logging surfaced in the interface.
 
 **Accuracy:** OCR augmentation for handwriting-heavy documents with word-level confidence and bounding boxes, enabling in-image highlighting of extracted values; brand-to-generic mapping via a dedicated terminology service.
